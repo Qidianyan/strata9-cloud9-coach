@@ -1,0 +1,38 @@
+# Sky's The Limit 2026 hackathon data: licensed, must not be committed
+stl-hackathon-2026-grid-starter/
+*grid-starter*/
+*.zst
+*.jsonl
+# Decompressed copies or extracts built from the data (adjust to your project)
+*.parquet
+*.sqlite
+*.duckdb
+meta/
+val/
+lol/
+val-ability-supplements/
+series.csv
+
+# Secrets & local environment files (never commit)
+.env
+.env.*
+*.env
+
+# Python / Node / IDE / Media scratch artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+node_modules/
+frontend/node_modules/
+frontend/dist/
+*.tsbuildinfo
+coverage/
+.design-lint/
+.DS_Store
+.idea/
+*.log
+*.mp4
+*.webm
+*.wav
