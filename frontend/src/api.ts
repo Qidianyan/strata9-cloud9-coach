@@ -2,12 +2,15 @@ import type {
   CoachAskResponse,
   CoachBriefResponse,
   CoachStatusResponse,
+  CorpusScoutingResponse,
   LolSeriesResponse,
   OpponentRow,
   OverviewResponse,
   ScoutingDossierResponse,
   TitleId,
   ValSeriesResponse,
+  WhatIfRequestPayload,
+  WhatIfResponse,
 } from './types';
 
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -90,6 +93,26 @@ export function requestCoachAsk(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
+    signal,
+  });
+}
+
+export function fetchCorpusScouting(
+  title: TitleId | 'all' = 'all',
+  signal?: AbortSignal,
+): Promise<CorpusScoutingResponse> {
+  const qs = new URLSearchParams({ title });
+  return requestJson<CorpusScoutingResponse>(`/api/scouting/corpus?${qs.toString()}`, { signal });
+}
+
+export function requestWhatIfSimulation(
+  payload: WhatIfRequestPayload,
+  signal?: AbortSignal,
+): Promise<WhatIfResponse> {
+  return requestJson<WhatIfResponse>('/api/tactical/what-if', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
     signal,
   });
 }

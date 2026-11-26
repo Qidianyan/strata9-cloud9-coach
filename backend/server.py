@@ -14,6 +14,7 @@ from urllib.parse import parse_qs, urlparse
 
 from .ai_coach import ask_coach_question, coach_status, generate_coach_brief
 from .config import DEFAULT_C9_TEAM, resolve_data_dir
+from .corpus_scouting import CorpusScoutingEngine
 from .lol_telemetry import parse_lol_series
 from .meta_index import MetaIndex
 from .val_telemetry import parse_val_series
@@ -27,6 +28,7 @@ class Strata9Engine:
         self.meta = MetaIndex(self.data_dir)
         self._val_cache = lru_cache(maxsize=16)(self._compute_val_series)
         self._lol_cache = lru_cache(maxsize=16)(self._compute_lol_series)
+        self.corpus = CorpusScoutingEngine(self)
 
     def health(self) -> Dict[str, Any]:
         return {
@@ -99,6 +101,12 @@ class Strata9Engine:
     ) -> Dict[str, Any]:
         series = self.get_val_series(series_id) if title == "val" else self.get_lol_series(series_id)
         return ask_coach_question(title, series, question=question, map_index=map_index, round_number=round_number)
+
+    def get_corpus_scouting(self, title: str = "all") -> Dict[str, Any]:
+        return self.corpus.get_corpus_report(title=title)
+
+    def simulate_what_if(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        return self.corpus.simulate_what_if(payload)
 
 
 def create_server(
@@ -173,6 +181,10 @@ def create_server(
                     c9_id = q1("team_id", "47351") or "47351"
                     return self._send_json(HTTPStatus.OK, engine.get_lol_series(sid, c9_id))
 
+                if path == "/api/scouting/corpus":
+                    title = q1("title", "all") or "all"
+                    return self._send_json(HTTPStatus.OK, engine.get_corpus_scouting(title))
+
                 if path == "/api/scouting/opponents":
                     title = q1("title", "val") or "val"
                     team_id = q1("team_id")
@@ -208,6 +220,8 @@ def create_server(
                         return self._send_bytes(HTTPStatus.OK, "text/html; charset=utf-8", index_html.read_bytes())
 
                 return self._send_json(HTTPStatus.NOT_FOUND, {"error": f"Route not found: {path}"})
+            except ValueError as exc:
+                return self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
             except FileNotFoundError as exc:
                 return self._send_json(HTTPStatus.NOT_FOUND, {"error": str(exc)})
             except KeyError as exc:
@@ -224,6 +238,10 @@ def create_server(
                 payload = json.loads(raw_body.decode("utf-8") or "{}")
                 if not isinstance(payload, dict):
                     return self._send_json(HTTPStatus.BAD_REQUEST, {"error": "JSON object payload required"})
+
+                if path == "/api/tactical/what-if":
+                    res = engine.simulate_what_if(payload)
+                    return self._send_json(HTTPStatus.OK, res)
 
                 if path == "/api/coach/brief":
                     title = str(payload.get("title") or "val").lower()

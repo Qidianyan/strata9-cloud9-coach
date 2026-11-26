@@ -11,6 +11,7 @@ const { chromium } = require(playwrightPath);
 
 const PROJECT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MATERIALS_DIR = path.resolve(PROJECT_DIR, '../../materials');
+const SHOTS_DIR = path.resolve(PROJECT_DIR, '../../shots');
 const PYTHON_BIN = process.env.STRATA9_PYTHON || '/Volumes/Extra/venvs/wave2-ml/bin/python';
 const STL_DATA_DIR = process.env.STL_DATA_DIR || '/Volumes/Extra/datasets/cloud9-grid-starter';
 
@@ -47,6 +48,7 @@ async function waitForHttp(url, timeoutMs = 20000) {
 
 async function main() {
   fs.mkdirSync(MATERIALS_DIR, { recursive: true });
+  fs.mkdirSync(SHOTS_DIR, { recursive: true });
 
   const backend = spawn(PYTHON_BIN, ['-m', 'backend.server', '--host', '127.0.0.1', '--port', '8799'], {
     cwd: PROJECT_DIR,
@@ -144,7 +146,23 @@ async function main() {
     });
     console.log('[E2E] Canvas2D Round Replay + AI Tactical Coach Q&A verified & captured (05).');
 
-    // Screenshot 2: Spatial Heatmap + Top 5 Turning Points
+    // Screenshot 2: Interactive Tactical What-If Sandbox + Spatial Heatmap
+    await page.evaluate(() => {
+      const el = document.querySelector('[data-section="what-if-simulator"]');
+      if (el) el.scrollIntoView({ block: 'start' });
+    });
+    await page.locator('[data-section="what-if-simulator"] .whatif-big-num').first().waitFor({ state: 'visible', timeout: 15000 });
+    await page.getByRole('button', { name: /Preset: 5v3 Full Execute/i }).click();
+    await page.locator('[data-section="what-if-simulator"]', { hasText: /Wilson 95% CI/i }).waitFor({ state: 'visible', timeout: 15000 });
+    await page.waitForTimeout(350);
+    await page.getByRole('button', { name: /Attach What-If to Export/i }).click();
+    await page.locator('text=Attached to Coach Export').waitFor({ state: 'visible', timeout: 10000 });
+    await page.screenshot({
+      path: path.join(SHOTS_DIR, 'after_match_whatif_1440.png'),
+      fullPage: false,
+    });
+    console.log('[E2E] VALORANT What-If Sandbox + Attach to Export verified & captured.');
+
     await page.evaluate(() => {
       const el = document.querySelector('section[aria-label="2D Ability-Cast Spatial Heatmap"]');
       if (el) el.scrollIntoView({ block: 'start' });
@@ -171,18 +189,48 @@ async function main() {
       path: path.join(MATERIALS_DIR, '03_strata9_lol_cloud9kia_macro.png'),
       fullPage: false,
     });
-    console.log('[E2E] LoL Cloud9 Kia 2754509 Game 2 macro view verified & captured (03).');
+    await page.evaluate(() => {
+      const el = document.querySelector('[data-section="what-if-simulator"]');
+      if (el) el.scrollIntoView({ block: 'start' });
+    });
+    await page.getByRole('button', { name: /Preset: 5v3 Baron Commit/i }).click();
+    await page.locator('[data-section="what-if-simulator"]', { hasText: /COMMIT MACRO PLAY/i }).waitFor({ state: 'visible', timeout: 15000 });
+    await page.waitForTimeout(300);
+    await page.screenshot({
+      path: path.join(SHOTS_DIR, 'after_lol_whatif_1440.png'),
+      fullPage: false,
+    });
+    console.log('[E2E] LoL Cloud9 Kia 2754509 Game 2 macro + What-If verified & captured.');
 
-    // 3. Switch to VALORANT + Scouting Dossier
+    // 3. Switch to VALORANT + Scouting Dossier (including Cross-Series Corpus Matrix)
+    await page.evaluate(() => window.scrollTo(0, 0));
     await page.getByRole('tab', { name: 'VALORANT (Cloud9)' }).click();
     await page.getByRole('button', { name: 'Scouting Dossier' }).click();
+    await page.locator('[data-section="corpus-scouting"] caption', { hasText: 'Multi-Series Map Winrate' }).waitFor({ state: 'visible', timeout: 20000 });
     await page.locator('h2', { hasText: 'Executive Coaching Directives' }).waitFor({ state: 'visible', timeout: 15000 });
     await page.locator('caption', { hasText: 'Map Veto & Pick Edge Matrix' }).waitFor({ state: 'visible', timeout: 15000 });
     await page.waitForTimeout(300);
     await page.screenshot({
+      path: path.join(SHOTS_DIR, 'after_corpus_scouting_1440.png'),
+      fullPage: false,
+    });
+    await page.screenshot({
       path: path.join(MATERIALS_DIR, '04_strata9_scouting_dossier.png'),
       fullPage: false,
     });
+
+    // Verify mobile 375px zero horizontal overflow
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.waitForTimeout(250);
+    const mobileOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+    if (mobileOverflow) {
+      throw new Error('Mobile 375px horizontal overflow detected on Scouting Dossier!');
+    }
+    await page.screenshot({
+      path: path.join(SHOTS_DIR, 'after_mobile_375.png'),
+      fullPage: false,
+    });
+    await page.setViewportSize({ width: 1440, height: 920 });
 
     const mdHref = await page.locator('a:has-text("Export Markdown Dossier")').getAttribute('href');
     const mdRes = await fetch(`http://127.0.0.1:5179${mdHref}`);

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import type { LolSeriesResponse } from '../types';
+import type { LolSeriesResponse, WhatIfResponse } from '../types';
 import { AiCoachPanel } from './AiCoachPanel';
+import { WhatIfSimulator } from './WhatIfSimulator';
 
 interface LolMacroViewProps {
   series: LolSeriesResponse;
@@ -20,6 +21,7 @@ export function LolMacroView({ series }: LolMacroViewProps) {
   const [gameIdx, setGameIdx] = useState(0);
   const [activeSwingRank, setActiveSwingRank] = useState<number>(1);
   const [objFilter, setObjFilter] = useState<'all' | 'neutral' | 'structures'>('all');
+  const [attachedWhatIf, setAttachedWhatIf] = useState<WhatIfResponse | null>(null);
 
   useEffect(() => {
     setGameIdx(0);
@@ -369,6 +371,7 @@ export function LolMacroView({ series }: LolMacroViewProps) {
             ? `Window ${activeSwing.window_label}: ${activeSwing.gold_swing >= 0 ? '+' : ''}${activeSwing.gold_swing.toLocaleString()}g (Kills ${activeSwing.c9_kills}-${activeSwing.opp_kills})`
             : undefined,
           telemetryPrescription: activeSwing?.coaching_prescription,
+          whatIfSimulation: attachedWhatIf,
           keyEvents: game.objectives
             .filter((o) => !['TOWER', 'VOIDGRUB'].includes(o.category))
             .slice(0, 10)
@@ -395,6 +398,18 @@ export function LolMacroView({ series }: LolMacroViewProps) {
             prompt: 'Evaluate draft win conditions and side-lane pressure for Cloud9 Kia',
           },
         ]}
+      />
+
+      <WhatIfSimulator
+        title="lol"
+        lolSeed={{
+          gameMinute: activeSwing ? Math.round((activeSwing.start_min + activeSwing.end_min) / 2) : 20,
+          goldDiff: activeSwing ? activeSwing.gold_diff_after - activeSwing.gold_swing : game.gold_diff_15,
+          dragonDiff: (c9Obj.dragons ?? 0) - (oppObj.dragons ?? 0),
+          label: `Game ${game.game_number} (${activeSwing ? activeSwing.window_label : '15:00'})`,
+        }}
+        attachedResult={attachedWhatIf}
+        onAttachToBrief={(sim) => setAttachedWhatIf(sim)}
       />
 
       <div className="tactical-grid">

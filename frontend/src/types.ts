@@ -537,3 +537,232 @@ export interface CoachAskResponse {
   drills: string[];
   citations: string[];
 }
+
+export interface ValCorpusMapRow {
+  map: string;
+  maps_played: number;
+  map_wins: number;
+  map_winrate: number;
+  rounds_played: number;
+  round_wins: number;
+  round_winrate: number;
+  wilson_ci_low: number;
+  wilson_ci_high: number;
+  atk_winrate: number;
+  def_winrate: number;
+  fk_winrate: number;
+  fk_conversion_rate: number;
+  post_plant_winrate: number;
+  avg_c9_casts_per_round: number;
+  series_ids: string[];
+  counter_directive: string;
+}
+
+export interface ValCorpusEconomyRow {
+  buy_tier: string;
+  tier_key: string;
+  rounds_played: number;
+  rounds_won: number;
+  winrate: number;
+  wilson_ci_low: number;
+  wilson_ci_high: number;
+  avg_econ_diff: number;
+}
+
+export interface ValCorpusOpponentRow {
+  opponent: string;
+  series_count: number;
+  series_ids: string[];
+  maps_played: number;
+  c9_map_wins: number;
+  rounds_played: number;
+  c9_round_winrate: number;
+  wilson_ci_low: number;
+  wilson_ci_high: number;
+  c9_fk_winrate: number;
+  c9_post_plant_winrate: number;
+  c9_anti_eco_winrate: number;
+  counter_strategy: string;
+}
+
+export interface ValCorpusZoneCell {
+  gx: number;
+  gy: number;
+  label: string;
+  c9_casts: number;
+  opp_casts: number;
+  total_casts: number;
+  c9_share_pct: number;
+  intensity: number;
+}
+
+export interface ValCorpusEvidenceSeries {
+  series_id: string;
+  event: string;
+  stage: string;
+  date: string;
+  opponent: string;
+  score: string;
+  c9_won: boolean;
+  maps: string[];
+  rounds_parsed: number;
+  spatial_casts: number;
+  has_supplement: boolean;
+}
+
+export interface ValCorpusData {
+  title: 'val';
+  series_count: number;
+  maps_count: number;
+  rounds_count: number;
+  spatial_casts_count: number;
+  rolled_back_games_dropped: number;
+  evidence_series: ValCorpusEvidenceSeries[];
+  map_matrix: ValCorpusMapRow[];
+  economy_matrix: ValCorpusEconomyRow[];
+  opponent_tendencies: ValCorpusOpponentRow[];
+  spatial_hotzones: ValCorpusZoneCell[];
+  coaching_directives: string[];
+}
+
+export interface LolCorpusSideRow {
+  side: string;
+  games_played: number;
+  games_won: number;
+  winrate: number;
+  wilson_ci_low: number;
+  wilson_ci_high: number;
+  avg_gold_diff_15: number;
+  baron_control_pct: number;
+  dragon_control_pct: number;
+}
+
+export interface LolCorpusObjectiveRow {
+  metric: string;
+  metric_key: string;
+  secured_games: number;
+  total_games: number;
+  control_rate: number;
+  winrate_when_secured: number;
+  wilson_ci_low: number;
+  wilson_ci_high: number;
+}
+
+export interface LolCorpusGoldBucketRow {
+  bucket: string;
+  minute_samples: number;
+  winrate: number;
+  wilson_ci_low: number;
+  wilson_ci_high: number;
+}
+
+export interface LolCorpusOpponentRow {
+  opponent: string;
+  series_count: number;
+  series_ids: string[];
+  games_played: number;
+  c9_game_wins: number;
+  c9_winrate: number;
+  wilson_ci_low: number;
+  wilson_ci_high: number;
+  avg_gold_diff_15: number;
+  baron_control_pct: number;
+  dragon_control_pct: number;
+  counter_strategy: string;
+}
+
+export interface LolCorpusEvidenceSeries {
+  series_id: string;
+  event: string;
+  stage: string;
+  date: string;
+  opponent: string;
+  score: string;
+  c9_won: boolean;
+  games_parsed: number;
+  avg_gold_diff_15: number;
+  baron_control_pct: number;
+  dragon_control_pct: number;
+}
+
+export interface LolCorpusData {
+  title: 'lol';
+  series_count: number;
+  games_count: number;
+  snapshots_count: number;
+  objectives_count: number;
+  evidence_series: LolCorpusEvidenceSeries[];
+  side_matrix: LolCorpusSideRow[];
+  objective_control: LolCorpusObjectiveRow[];
+  gold_bucket_matrix: LolCorpusGoldBucketRow[];
+  opponent_tendencies: LolCorpusOpponentRow[];
+  coaching_directives: string[];
+}
+
+export interface CorpusScoutingResponse {
+  generated_from: string;
+  data_dir_mode: string;
+  zero_data_committed: boolean;
+  requested_title: string;
+  val?: ValCorpusData;
+  lol?: LolCorpusData;
+}
+
+export interface WhatIfRequestPayload {
+  title: TitleId;
+  // VALORANT fields
+  map?: string;
+  side?: 'attacker' | 'defender';
+  baseline_econ_diff?: number;
+  econ_diff?: number;
+  baseline_buy_tier?: 'eco' | 'pistol' | 'half_buy' | 'force_buy' | 'full_buy';
+  buy_tier?: 'eco' | 'pistol' | 'half_buy' | 'force_buy' | 'full_buy';
+  baseline_c9_alive?: number;
+  baseline_opp_alive?: number;
+  c9_alive?: number;
+  opp_alive?: number;
+  baseline_site_state?: 'unplanted' | 'planted_default' | 'planted_crossfire' | 'save_weapons';
+  site_state?: 'unplanted' | 'planted_default' | 'planted_crossfire' | 'save_weapons';
+  baseline_first_kill?: 'opp' | 'none' | 'c9';
+  first_kill?: 'opp' | 'none' | 'c9';
+  // LoL fields
+  game_minute?: number;
+  baseline_gold_diff?: number;
+  gold_diff?: number;
+  baseline_objective_decision?:
+    | 'concede_objective'
+    | 'trade_crossmap_tower'
+    | 'neutral_lane_reset'
+    | 'contest_dragon'
+    | 'secure_atakhan'
+    | 'secure_dragon_soul'
+    | 'secure_baron';
+  objective_decision?:
+    | 'concede_objective'
+    | 'trade_crossmap_tower'
+    | 'neutral_lane_reset'
+    | 'contest_dragon'
+    | 'secure_atakhan'
+    | 'secure_dragon_soul'
+    | 'secure_baron';
+  baseline_dragon_diff?: number;
+  dragon_diff?: number;
+}
+
+export interface WhatIfResponse {
+  title: TitleId;
+  baselineWinProb: number;
+  simulatedWinProb: number;
+  deltaWinPct: number;
+  baseline_ci: [number, number];
+  simulated_ci: [number, number];
+  wilson_ci_low: number;
+  wilson_ci_high: number;
+  effective_sample_n: number;
+  corpus_matches_used: number;
+  matched_rounds: number;
+  scenario: Record<string, string | number>;
+  feature_attributions: Record<string, number>;
+  coaching_decision: string;
+  counter_actions: string[];
+}

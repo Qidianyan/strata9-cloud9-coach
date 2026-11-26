@@ -16,6 +16,7 @@ from backend.ai_coach import (
     validate_model_allowed,
 )
 from backend.config import resolve_data_dir
+from backend.corpus_scouting import wilson_ci
 from backend.lol_telemetry import parse_lol_series
 from backend.meta_index import MetaIndex
 from backend.server import Strata9Engine, create_server
@@ -294,4 +295,214 @@ def test_ai_coach_policy_and_offline_fallback(engine: Strata9Engine, monkeypatch
     lol_qa = ask_coach_question("lol", lol_series, "What decided Game 2?", map_index=1)
     assert lol_qa["source"] == "deterministic_fallback"
     assert "Game 2" in lol_qa["answer"]
+
+
+def test_corpus_scouting_val_multi_series_aggregation(engine: Strata9Engine) -> None:
+    report = engine.get_corpus_scouting("val")
+    assert report["generated_from"] == "live_grid_zst_corpus"
+    assert report["zero_data_committed"] is True
+    val = report["val"]
+    assert val["series_count"] >= 6
+    assert val["maps_count"] >= 12
+    assert val["rounds_count"] >= 250
+    assert val["spatial_casts_count"] >= 5000
+    assert val["rolled_back_games_dropped"] >= 1
+    assert len(val["evidence_series"]) == val["series_count"]
+    assert len(val["spatial_hotzones"]) == 9
+    assert len(val["economy_matrix"]) >= 3
+    assert len(val["opponent_tendencies"]) >= 3
+
+    for m in val["map_matrix"]:
+        assert 0.0 <= m["wilson_ci_low"] <= m["round_winrate"] <= m["wilson_ci_high"] <= 100.0
+        assert len(m["counter_directive"]) > 20
+    for e in val["economy_matrix"]:
+        assert 0.0 <= e["wilson_ci_low"] <= e["winrate"] <= e["wilson_ci_high"] <= 100.0
+
+
+def test_corpus_scouting_lol_multi_series_aggregation(engine: Strata9Engine) -> None:
+    report = engine.get_corpus_scouting("lol")
+    lol = report["lol"]
+    assert lol["series_count"] >= 4
+    assert lol["games_count"] >= 8
+    assert lol["snapshots_count"] >= 180
+    assert lol["objectives_count"] >= 80
+    assert len(lol["evidence_series"]) == lol["series_count"]
+    assert len(lol["objective_control"]) == 6
+    assert len(lol["gold_bucket_matrix"]) >= 3
+    assert len(lol["opponent_tendencies"]) >= 3
+
+    for row in lol["objective_control"]:
+        assert 0.0 <= row["control_rate"] <= 100.0
+        assert 0.0 <= row["wilson_ci_low"] <= row["winrate_when_secured"] <= row["wilson_ci_high"] <= 100.0
+
+
+def test_wilson_ci_boundaries_and_edge_cases() -> None:
+    for wins, total in [(0, 10), (10, 10), (5, 10), (1, 1), (0, 0), (-5, 10), (15, 10), (float("nan"), 10)]:
+        lo, mid, hi = wilson_ci(wins, total)
+        assert 0.0 <= lo <= mid <= hi <= 1.0
+    lo_small, _, hi_small = wilson_ci(5, 10)
+    lo_large, _, hi_large = wilson_ci(500, 1000)
+    assert (hi_large - lo_large) < (hi_small - lo_small)
+
+
+def test_what_if_val_monotonicity_and_bounds(engine: Strata9Engine) -> None:
+    base_req = {
+        "title": "val",
+        "map": "fracture",
+        "side": "attacker",
+        "baseline_econ_diff": 0,
+        "econ_diff": 0,
+        "baseline_buy_tier": "full_buy",
+        "buy_tier": "full_buy",
+        "baseline_c9_alive": 5,
+        "baseline_opp_alive": 5,
+        "c9_alive": 5,
+        "opp_alive": 5,
+        "baseline_site_state": "unplanted",
+        "site_state": "unplanted",
+        "baseline_first_kill": "none",
+        "first_kill": "none",
+    }
+
+    # Economy monotonicity
+    econ_probs = [engine.simulate_what_if({**base_req, "econ_diff": e})["simulatedWinProb"] for e in (-8000, 0, 8000)]
+    assert econ_probs[0] < econ_probs[1] < econ_probs[2]
+
+    # Buy-tier monotonicity
+    buy_probs = [
+        engine.simulate_what_if({**base_req, "buy_tier": b})["simulatedWinProb"]
+        for b in ("eco", "half_buy", "force_buy", "full_buy")
+    ]
+    assert buy_probs[0] < buy_probs[1] < buy_probs[2] < buy_probs[3]
+
+    # Manpower monotonicity
+    alive_probs = [
+        engine.simulate_what_if({**base_req, "c9_alive": c, "opp_alive": o})["simulatedWinProb"]
+        for c, o in ((2, 4), (3, 3), (5, 3))
+    ]
+    assert alive_probs[0] < alive_probs[1] < alive_probs[2]
+
+    # First-kill monotonicity
+    fk_probs = [engine.simulate_what_if({**base_req, "first_kill": fk})["simulatedWinProb"] for fk in ("opp", "none", "c9")]
+    assert fk_probs[0] < fk_probs[1] < fk_probs[2]
+
+    # Spike state monotonicity on Attack
+    site_res = engine.simulate_what_if({**base_req, "site_state": "planted_crossfire", "c9_alive": 4, "opp_alive": 3})
+    save_res = engine.simulate_what_if({**base_req, "site_state": "save_weapons", "c9_alive": 2, "opp_alive": 4})
+    assert save_res["simulatedWinProb"] < site_res["simulatedWinProb"]
+    for res in (site_res, save_res):
+        assert 0.0 <= res["baselineWinProb"] <= 1.0
+        assert 0.0 <= res["wilson_ci_low"] <= res["simulatedWinProb"] <= res["wilson_ci_high"] <= 1.0
+        assert res["deltaWinPct"] == pytest.approx(round((res["simulatedWinProb"] - res["baselineWinProb"]) * 100.0, 2))
+
+
+def test_what_if_lol_monotonicity_and_bounds(engine: Strata9Engine) -> None:
+    base_req = {
+        "title": "lol",
+        "game_minute": 24,
+        "baseline_gold_diff": 0,
+        "gold_diff": 0,
+        "baseline_c9_alive": 5,
+        "baseline_opp_alive": 5,
+        "c9_alive": 5,
+        "opp_alive": 5,
+        "baseline_objective_decision": "neutral_lane_reset",
+        "objective_decision": "neutral_lane_reset",
+        "baseline_dragon_diff": 0,
+        "dragon_diff": 0,
+    }
+
+    gold_probs = [engine.simulate_what_if({**base_req, "gold_diff": g})["simulatedWinProb"] for g in (-6000, 0, 6000)]
+    assert gold_probs[0] < gold_probs[1] < gold_probs[2]
+
+    obj_probs = [
+        engine.simulate_what_if({**base_req, "objective_decision": o})["simulatedWinProb"]
+        for o in ("concede_objective", "trade_crossmap_tower", "contest_dragon", "secure_baron")
+    ]
+    assert obj_probs[0] < obj_probs[1] < obj_probs[2] < obj_probs[3]
+
+    res = engine.simulate_what_if({**base_req, "gold_diff": 3500, "objective_decision": "secure_baron", "c9_alive": 5, "opp_alive": 3})
+    assert 0.0 <= res["wilson_ci_low"] <= res["simulatedWinProb"] <= res["wilson_ci_high"] <= 1.0
+    assert res["deltaWinPct"] > 0
+
+
+def test_what_if_invalid_inputs_and_nan_rejected(engine: Strata9Engine) -> None:
+    bad_payloads = [
+        {"title": "dota"},
+        {"title": "val", "econ_diff": float("nan")},
+        {"title": "val", "econ_diff": float("inf")},
+        {"title": "val", "econ_diff": -float("inf")},
+        {"title": "val", "econ_diff": "NaN"},
+        {"title": "val", "econ_diff": True},
+        {"title": "val", "econ_diff": 999999},
+        {"title": "val", "c9_alive": 0},
+        {"title": "val", "c9_alive": 6},
+        {"title": "val", "c9_alive": 2.5},
+        {"title": "val", "buy_tier": "laser_cannon"},
+        {"title": "val", "side": "jungle"},
+        {"title": "lol", "gold_diff": float("nan")},
+        {"title": "lol", "objective_decision": "elder_cheat"},
+        {"title": "lol", "game_minute": 120},
+    ]
+    for bad in bad_payloads:
+        with pytest.raises(ValueError):
+            engine.simulate_what_if(bad)
+
+
+def test_http_corpus_and_what_if_endpoints(engine: Strata9Engine) -> None:
+    import urllib.error
+
+    srv = create_server(engine, host="127.0.0.1", port=0)
+    port = srv.server_address[1]
+    thread = threading.Thread(target=srv.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{port}"
+    try:
+        with urllib.request.urlopen(f"{base}/api/scouting/corpus?title=all", timeout=20) as resp:
+            assert resp.status == 200
+            corpus = json.loads(resp.read().decode("utf-8"))
+        assert corpus["val"]["series_count"] >= 6
+        assert corpus["lol"]["series_count"] >= 4
+
+        with pytest.raises(urllib.error.HTTPError) as exc_bad_title:
+            urllib.request.urlopen(f"{base}/api/scouting/corpus?title=invalid", timeout=10)
+        assert exc_bad_title.value.code == 400
+
+        req_ok = urllib.request.Request(
+            f"{base}/api/tactical/what-if",
+            data=json.dumps(
+                {
+                    "title": "val",
+                    "map": "fracture",
+                    "side": "attacker",
+                    "econ_diff": 3500,
+                    "buy_tier": "full_buy",
+                    "c9_alive": 5,
+                    "opp_alive": 3,
+                    "site_state": "planted_crossfire",
+                    "first_kill": "c9",
+                }
+            ).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req_ok, timeout=15) as resp:
+            assert resp.status == 200
+            sim = json.loads(resp.read().decode("utf-8"))
+        assert 0.0 <= sim["wilson_ci_low"] <= sim["simulatedWinProb"] <= sim["wilson_ci_high"] <= 1.0
+        assert sim["deltaWinPct"] > 0
+
+        req_nan = urllib.request.Request(
+            f"{base}/api/tactical/what-if",
+            data=b'{"title":"val","econ_diff":"NaN"}',
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with pytest.raises(urllib.error.HTTPError) as exc_nan:
+            urllib.request.urlopen(req_nan, timeout=10)
+        assert exc_nan.value.code == 400
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
 

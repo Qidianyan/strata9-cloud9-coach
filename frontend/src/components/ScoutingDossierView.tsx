@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { fetchDossier, fetchOpponents, getDossierMarkdownUrl } from '../api';
 import type { OpponentRow, ScoutingDossierResponse, TitleId } from '../types';
+import { CorpusScoutingPanel } from './CorpusScoutingPanel';
 
 interface ScoutingDossierViewProps {
   title: TitleId;
@@ -155,6 +156,8 @@ export function ScoutingDossierView({ title, onOpenLocalSeries }: ScoutingDossie
 
       {dossier && (
         <>
+          <CorpusScoutingPanel title={title} onOpenLocalSeries={onOpenLocalSeries} />
+
           <section className="kpi-grid">
             <div className="kpi-card">
               <div className="kpi-label">Verified H2H Maps/Games</div>

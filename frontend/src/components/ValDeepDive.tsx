@@ -1,8 +1,17 @@
 import { useEffect, useState } from 'react';
-import type { ValSeriesResponse } from '../types';
+import type { ValSeriesResponse, WhatIfResponse } from '../types';
 import { AiCoachPanel } from './AiCoachPanel';
 import { RoundReplayCanvas } from './RoundReplayCanvas';
 import { SpatialHeatmap } from './SpatialHeatmap';
+import { WhatIfSimulator } from './WhatIfSimulator';
+
+function mapBuyClassToTier(buyClass: string): 'eco' | 'pistol' | 'half_buy' | 'force_buy' | 'full_buy' {
+  const norm = buyClass.toUpperCase();
+  if (norm.includes('PISTOL')) return 'pistol';
+  if (norm.includes('ECO') || norm.includes('SAVE')) return 'eco';
+  if (norm.includes('HALF') || norm.includes('FORCE')) return 'half_buy';
+  return 'full_buy';
+}
 
 interface ValDeepDiveProps {
   series: ValSeriesResponse;
@@ -11,6 +20,7 @@ interface ValDeepDiveProps {
 export function ValDeepDive({ series }: ValDeepDiveProps) {
   const [mapIdx, setMapIdx] = useState(0);
   const [selectedRoundNum, setSelectedRoundNum] = useState<number>(1);
+  const [attachedWhatIf, setAttachedWhatIf] = useState<WhatIfResponse | null>(null);
 
   useEffect(() => {
     setMapIdx(0);
@@ -328,6 +338,7 @@ export function ValDeepDive({ series }: ValDeepDiveProps) {
                 : `No Plant / ${selectedRound.win_type}`,
               headline: selectedRound.headline,
               telemetryPrescription: selectedRound.coaching_prescription,
+              whatIfSimulation: attachedWhatIf,
               keyEvents: (selectedRound.replay?.events ?? [])
                 .filter((ev) => ['kill', 'plant', 'defuse', 'explode'].includes(ev.kind))
                 .map((ev) => ({
@@ -360,6 +371,27 @@ export function ValDeepDive({ series }: ValDeepDiveProps) {
             ]}
           />
         </div>
+      )}
+
+      {selectedRound && (
+        <WhatIfSimulator
+          title="val"
+          valSeed={{
+            map: activeMap.map,
+            side: selectedRound.c9_side === 'defender' ? 'defender' : 'attacker',
+            econDiff: selectedRound.econ_diff,
+            buyTier: mapBuyClassToTier(selectedRound.c9_buy_class),
+            firstKill: selectedRound.first_kill
+              ? selectedRound.first_kill.c9_got_first_kill
+                ? 'c9'
+                : 'opp'
+              : 'none',
+            siteState: selectedRound.bomb_planted ? 'planted_default' : 'unplanted',
+            label: `${activeMap.map.toUpperCase()} R${selectedRound.round_number}`,
+          }}
+          attachedResult={attachedWhatIf}
+          onAttachToBrief={(sim) => setAttachedWhatIf(sim)}
+        />
       )}
 
       <div className="tactical-grid">

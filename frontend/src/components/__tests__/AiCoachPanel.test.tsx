@@ -186,4 +186,54 @@ describe('AiCoachPanel', () => {
     Object.defineProperty(URL, 'createObjectURL', { value: origCreate, configurable: true, writable: true });
     Object.defineProperty(URL, 'revokeObjectURL', { value: origRevoke, configurable: true, writable: true });
   });
+
+  it('embeds attached What-If simulation delta and Wilson CI into exported Markdown and JSON briefs', () => {
+    const payload = buildBriefPayload({
+      title: 'val',
+      seriesId: '2748746',
+      mapIndex: 0,
+      roundNumber: 18,
+      contextLabel: 'FRACTURE R18',
+      telemetry: {
+        seriesLabel: 'Cloud9 vs NRG (2-0)',
+        mapOrGame: 'FRACTURE (14-12)',
+        roundNumber: 18,
+        keyEvents: [],
+        whatIfSimulation: {
+          title: 'val',
+          baselineWinProb: 0.44,
+          simulatedWinProb: 0.78,
+          deltaWinPct: 34.0,
+          baseline_ci: [0.34, 0.54],
+          simulated_ci: [0.68, 0.86],
+          wilson_ci_low: 0.68,
+          wilson_ci_high: 0.86,
+          effective_sample_n: 92,
+          corpus_matches_used: 6,
+          matched_rounds: 64,
+          scenario: { buy_tier: 'full_buy' },
+          feature_attributions: { manpower_logit: 0.85 },
+          coaching_decision: 'GREEN LIGHT (+34.0pp EV gain -> 78.0%): commit immediately.',
+          counter_actions: ['Lock buddy-trade spacing after Spike plant.'],
+        },
+      },
+      brief: {
+        source: 'live_llm',
+        model: 'grok-4.7',
+        latency_ms: 920,
+        summary: 'Cloud9 won Fracture 14-12.',
+        key_findings: ['R18 clutch recovery.'],
+        drills: ['Drill A-site crossfires.'],
+        context_tag: 'FRACTURE',
+      },
+      qa: null,
+    });
+
+    const md = buildBriefMarkdown(payload);
+    expect(md).toContain('## Tactical What-If Simulation');
+    expect(md).toContain('+34.0pp');
+    expect(md).toContain('68.0% - 86.0%');
+    expect(md).toContain('Lock buddy-trade spacing after Spike plant.');
+    expect(payload.what_if_simulation?.simulatedWinProb).toBe(0.78);
+  });
 });

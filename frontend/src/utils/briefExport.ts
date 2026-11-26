@@ -1,4 +1,4 @@
-import type { CoachAskResponse, CoachBriefResponse, TitleId } from '../types';
+import type { CoachAskResponse, CoachBriefResponse, TitleId, WhatIfResponse } from '../types';
 
 export interface CoachingExportEvent {
   clock_label: string;
@@ -23,6 +23,7 @@ export interface CoachingExportContext {
   headline?: string;
   telemetryPrescription?: string;
   keyEvents: CoachingExportEvent[];
+  whatIfSimulation?: WhatIfResponse | null;
 }
 
 export interface CoachingBriefExportPayload {
@@ -49,6 +50,7 @@ export interface CoachingBriefExportPayload {
     prescription: string | null;
     key_events: CoachingExportEvent[];
   };
+  what_if_simulation: WhatIfResponse | null;
   brief: CoachBriefResponse;
   qa: CoachAskResponse | null;
 }
@@ -100,13 +102,14 @@ export function buildBriefPayload(params: {
       prescription: telemetry?.telemetryPrescription ?? null,
       key_events: telemetry?.keyEvents ?? [],
     },
+    what_if_simulation: telemetry?.whatIfSimulation ?? null,
     brief,
     qa,
   };
 }
 
 export function buildBriefMarkdown(payload: CoachingBriefExportPayload): string {
-  const { context, telemetry, brief, qa } = payload;
+  const { context, telemetry, what_if_simulation: whatIf, brief, qa } = payload;
   const lines: string[] = [
     '# Strata9 Tactical Coaching Brief',
     '',
@@ -167,6 +170,25 @@ export function buildBriefMarkdown(payload: CoachingBriefExportPayload): string 
   lines.push('', '## Prescribed Scrim Drills');
   for (const drill of brief.drills) {
     lines.push(`- ${drill}`);
+  }
+
+  if (whatIf) {
+    const basePct = (whatIf.baselineWinProb * 100).toFixed(1);
+    const simPct = (whatIf.simulatedWinProb * 100).toFixed(1);
+    const ciLo = (whatIf.wilson_ci_low * 100).toFixed(1);
+    const ciHi = (whatIf.wilson_ci_high * 100).toFixed(1);
+    const sign = whatIf.deltaWinPct >= 0 ? '+' : '';
+    lines.push(
+      '',
+      '## Tactical What-If Simulation (Empirical GRID Corpus)',
+      `- **Baseline Win Prob**: ${basePct}%`,
+      `- **Simulated Win Prob**: ${simPct}% (Wilson 95% CI: ${ciLo}% - ${ciHi}%, n=${whatIf.effective_sample_n} across ${whatIf.corpus_matches_used} series)`,
+      `- **Delta EV**: ${sign}${whatIf.deltaWinPct.toFixed(1)}pp`,
+      `- **Coaching Call**: ${whatIf.coaching_decision}`,
+    );
+    for (const act of whatIf.counter_actions) {
+      lines.push(`- **Counter Action**: ${act}`);
+    }
   }
 
   if (qa) {

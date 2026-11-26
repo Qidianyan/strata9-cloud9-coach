@@ -175,6 +175,16 @@ export function AiCoachPanel({
         </div>
       )}
 
+      {telemetryExport?.whatIfSimulation && (
+        <div className="audit-strip" style={{ marginTop: 0, marginBottom: 10 }}>
+          <span className="audit-chip mono">
+            What-If Attached: {(telemetryExport.whatIfSimulation.simulatedWinProb * 100).toFixed(1)}% (
+            {telemetryExport.whatIfSimulation.deltaWinPct >= 0 ? '+' : ''}
+            {telemetryExport.whatIfSimulation.deltaWinPct.toFixed(1)}pp) included in Export .MD/.JSON
+          </span>
+        </div>
+      )}
+
       {briefError && <div className="status-banner is-error">{briefError}</div>}
 
       {briefLoading && !brief && (
