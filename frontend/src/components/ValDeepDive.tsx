@@ -24,12 +24,17 @@ export function ValDeepDive({ series }: ValDeepDiveProps) {
 
   useEffect(() => {
     setMapIdx(0);
+    setAttachedWhatIf(null);
     const firstMap = series.maps[0];
     if (firstMap) {
       const topTp = firstMap.top_turning_points[0];
       setSelectedRoundNum(topTp ? topTp.round_number : firstMap.rounds[0]?.round_number ?? 1);
     }
   }, [series.series_id, series.maps]);
+
+  useEffect(() => {
+    setAttachedWhatIf(null);
+  }, [mapIdx, selectedRoundNum]);
 
   const activeMap = series.maps[mapIdx] ?? series.maps[0];
   if (!activeMap) {

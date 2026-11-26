@@ -26,7 +26,12 @@ export function LolMacroView({ series }: LolMacroViewProps) {
   useEffect(() => {
     setGameIdx(0);
     setActiveSwingRank(1);
+    setAttachedWhatIf(null);
   }, [series.series_id]);
+
+  useEffect(() => {
+    setAttachedWhatIf(null);
+  }, [gameIdx, activeSwingRank]);
 
   const game = series.games[gameIdx] ?? series.games[0];
   if (!game) {

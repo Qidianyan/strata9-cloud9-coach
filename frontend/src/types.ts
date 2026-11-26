@@ -712,6 +712,7 @@ export interface WhatIfRequestPayload {
   title: TitleId;
   // VALORANT fields
   map?: string;
+  baseline_side?: 'attacker' | 'defender';
   side?: 'attacker' | 'defender';
   baseline_econ_diff?: number;
   econ_diff?: number;

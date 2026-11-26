@@ -59,13 +59,25 @@ export function CorpusScoutingPanel({ title, onOpenLocalSeries }: CorpusScouting
       </div>
 
       {error && <div className="status-banner is-error">{error}</div>}
-      {loading && !data && (
+      {loading && !(title === 'val' ? val : lol) && (
         <div className="status-banner">
           <span className="mono">Aggregating real multi-series GRID .jsonl.zst feeds...</span>
         </div>
       )}
 
-      {title === 'val' && val && (
+      {!loading && !error && title === 'val' && val && val.series_count === 0 && (
+        <div className="status-banner">
+          <span>No local VALORANT .jsonl.zst feeds found in STL_DATA_DIR. Sparse-checkout feeds to enable multi-series aggregation.</span>
+        </div>
+      )}
+
+      {!loading && !error && title === 'lol' && lol && lol.series_count === 0 && (
+        <div className="status-banner">
+          <span>No local League of Legends .jsonl.zst feeds found in STL_DATA_DIR. Sparse-checkout feeds to enable multi-series aggregation.</span>
+        </div>
+      )}
+
+      {title === 'val' && val && val.series_count > 0 && (
         <div className="corpus-stack">
           <ul className="brief-list">
             {val.coaching_directives.map((d, idx) => (
@@ -216,7 +228,7 @@ export function CorpusScoutingPanel({ title, onOpenLocalSeries }: CorpusScouting
         </div>
       )}
 
-      {title === 'lol' && lol && (
+      {title === 'lol' && lol && lol.series_count > 0 && (
         <div className="corpus-stack">
           <ul className="brief-list">
             {lol.coaching_directives.map((d, idx) => (
@@ -275,6 +287,49 @@ export function CorpusScoutingPanel({ title, onOpenLocalSeries }: CorpusScouting
               </div>
             </div>
           </div>
+
+          {lol.opponent_tendencies.length > 0 && (
+            <div tabIndex={0} role="region" aria-labelledby="lol-corpus-opp-caption" className="table-wrapper">
+              <table className="data-table">
+                <caption id="lol-corpus-opp-caption">
+                  Cross-Series Cloud9 Kia Opponent Tendencies ({lol.series_count} Streamed .jsonl.zst Feeds)
+                </caption>
+                <thead>
+                  <tr>
+                    <th>Opponent</th>
+                    <th className="num">Games (W-L)</th>
+                    <th className="num">C9 WR (95% CI)</th>
+                    <th className="num">Avg GD@15</th>
+                    <th className="num">Baron / Drake%</th>
+                    <th>Counter Strategy</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lol.opponent_tendencies.map((o) => (
+                    <tr key={o.opponent}>
+                      <th scope="row">{o.opponent}</th>
+                      <td data-label="Games" className="num">
+                        {o.c9_game_wins}-{o.games_played - o.c9_game_wins} ({o.games_played})
+                      </td>
+                      <td data-label="C9 WR" className={`num ${o.c9_winrate >= 50 ? 'text-green' : 'text-crimson'}`}>
+                        {o.c9_winrate}% ({o.wilson_ci_low}-{o.wilson_ci_high}%)
+                      </td>
+                      <td data-label="Avg GD@15" className="num">
+                        {o.avg_gold_diff_15 >= 0 ? '+' : ''}
+                        {o.avg_gold_diff_15}g
+                      </td>
+                      <td data-label="Baron / Drake%" className="num">
+                        {o.baron_control_pct}% / {o.dragon_control_pct}%
+                      </td>
+                      <td data-label="Counter Strategy" style={{ whiteSpace: 'normal', maxWidth: 340 }}>
+                        {o.counter_strategy}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           <div className="audit-strip">
             {lol.evidence_series.map((s) => (

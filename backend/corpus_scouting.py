@@ -10,6 +10,7 @@ and minute-by-minute gold states, and powers POST /api/tactical/what-if simulati
 from __future__ import annotations
 
 import math
+import threading
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -144,6 +145,8 @@ class CorpusScoutingEngine:
 
     def __init__(self, engine: Any) -> None:
         self._engine = engine
+        self._val_lock = threading.Lock()
+        self._lol_lock = threading.Lock()
         self._val_corpus: Optional[Dict[str, Any]] = None
         self._lol_corpus: Optional[Dict[str, Any]] = None
         self._val_round_records: List[Dict[str, Any]] = []
@@ -154,6 +157,12 @@ class CorpusScoutingEngine:
     def _ensure_val_built(self) -> Dict[str, Any]:
         if self._val_corpus is not None:
             return self._val_corpus
+        with self._val_lock:
+            if self._val_corpus is not None:
+                return self._val_corpus
+            return self._build_val_corpus_locked()
+
+    def _build_val_corpus_locked(self) -> Dict[str, Any]:
 
         meta = self._engine.meta
         feed_ids = sorted(meta.val_feeds.keys())
@@ -540,6 +549,12 @@ class CorpusScoutingEngine:
     def _ensure_lol_built(self) -> Dict[str, Any]:
         if self._lol_corpus is not None:
             return self._lol_corpus
+        with self._lol_lock:
+            if self._lol_corpus is not None:
+                return self._lol_corpus
+            return self._build_lol_corpus_locked()
+
+    def _build_lol_corpus_locked(self) -> Dict[str, Any]:
 
         meta = self._engine.meta
         feed_ids = sorted(meta.lol_feeds.keys())
@@ -888,15 +903,23 @@ class CorpusScoutingEngine:
         w = model["weights"]
         bias = float(model["bias"])
 
-        side = str(params.get("side") or "attacker").strip().lower()
+        raw_side = params.get("side", "attacker")
+        side = str(raw_side).strip().lower() if raw_side is not None else "attacker"
         if side not in ("attacker", "defender"):
             raise ValueError("VALORANT 'side' must be 'attacker' or 'defender'.")
+
+        raw_base_side = params.get("baseline_side", side)
+        base_side = str(raw_base_side).strip().lower() if raw_base_side is not None else side
+        if base_side not in ("attacker", "defender"):
+            raise ValueError("VALORANT 'baseline_side' must be 'attacker' or 'defender'.")
 
         base_econ = _require_finite_number(params.get("baseline_econ_diff", 0), "baseline_econ_diff", -30000, 30000)
         sim_econ = _require_finite_number(params.get("econ_diff", base_econ), "econ_diff", -30000, 30000)
 
-        base_buy = str(params.get("baseline_buy_tier") or "full_buy").strip().lower()
-        sim_buy = str(params.get("buy_tier") or base_buy).strip().lower()
+        raw_base_buy = params.get("baseline_buy_tier", "full_buy")
+        base_buy = str(raw_base_buy).strip().lower() if raw_base_buy is not None else "full_buy"
+        raw_sim_buy = params.get("buy_tier", base_buy)
+        sim_buy = str(raw_sim_buy).strip().lower() if raw_sim_buy is not None else base_buy
         if base_buy not in VAL_BUY_SCORES:
             raise ValueError(f"Invalid baseline_buy_tier '{base_buy}'. Allowed: {sorted(VAL_BUY_SCORES)}.")
         if sim_buy not in VAL_BUY_SCORES:
@@ -907,36 +930,55 @@ class CorpusScoutingEngine:
         sim_c9_alive = _require_int_range(params.get("c9_alive", base_c9_alive), "c9_alive", 1, 5)
         sim_opp_alive = _require_int_range(params.get("opp_alive", base_opp_alive), "opp_alive", 1, 5)
 
-        site_table = VAL_SITE_SCORES_ATK if side == "attacker" else VAL_SITE_SCORES_DEF
-        base_site = str(params.get("baseline_site_state") or "unplanted").strip().lower()
-        sim_site = str(params.get("site_state") or base_site).strip().lower()
-        if base_site not in site_table:
-            raise ValueError(f"Invalid baseline_site_state '{base_site}'. Allowed: {sorted(site_table)}.")
-        if sim_site not in site_table:
-            raise ValueError(f"Invalid site_state '{sim_site}'. Allowed: {sorted(site_table)}.")
+        base_site_table = VAL_SITE_SCORES_ATK if base_side == "attacker" else VAL_SITE_SCORES_DEF
+        sim_site_table = VAL_SITE_SCORES_ATK if side == "attacker" else VAL_SITE_SCORES_DEF
+        raw_base_site = params.get("baseline_site_state", "unplanted")
+        base_site = str(raw_base_site).strip().lower() if raw_base_site is not None else "unplanted"
+        raw_sim_site = params.get("site_state", base_site)
+        sim_site = str(raw_sim_site).strip().lower() if raw_sim_site is not None else base_site
+        if base_site not in base_site_table:
+            raise ValueError(f"Invalid baseline_site_state '{base_site}'. Allowed: {sorted(base_site_table)}.")
+        if sim_site not in sim_site_table:
+            raise ValueError(f"Invalid site_state '{sim_site}'. Allowed: {sorted(sim_site_table)}.")
 
-        base_fk = str(params.get("baseline_first_kill") or "none").strip().lower()
-        sim_fk = str(params.get("first_kill") or base_fk).strip().lower()
+        raw_base_fk = params.get("baseline_first_kill", "none")
+        base_fk = str(raw_base_fk).strip().lower() if raw_base_fk is not None else "none"
+        raw_sim_fk = params.get("first_kill", base_fk)
+        sim_fk = str(raw_sim_fk).strip().lower() if raw_sim_fk is not None else base_fk
         if base_fk not in VAL_FIRST_KILL_SCORES:
             raise ValueError(f"Invalid baseline_first_kill '{base_fk}'. Allowed: {sorted(VAL_FIRST_KILL_SCORES)}.")
         if sim_fk not in VAL_FIRST_KILL_SCORES:
             raise ValueError(f"Invalid first_kill '{sim_fk}'. Allowed: {sorted(VAL_FIRST_KILL_SCORES)}.")
 
         map_name = str(params.get("map") or "all").strip().lower()
-        map_offset = 0.0
-        if map_name != "all":
-            m_row = next((m for m in corpus["map_matrix"] if m["map"].lower() == map_name), None)
-            if m_row:
-                side_wr = m_row["atk_winrate"] if side == "attacker" else m_row["def_winrate"]
-                map_offset = max(-0.28, min(0.28, (side_wr - 50.0) / 100.0))
+        m_row = (
+            next((m for m in corpus["map_matrix"] if m["map"].lower() == map_name), None)
+            if map_name != "all"
+            else None
+        )
 
-        def score_state(econ: float, buy: str, c9_a: int, opp_a: int, site: str, fk: str) -> Tuple[float, Dict[str, float]]:
+        def map_side_offset(target_side: str) -> float:
+            if not m_row:
+                return 0.0
+            side_wr = m_row["atk_winrate"] if target_side == "attacker" else m_row["def_winrate"]
+            return max(-0.28, min(0.28, (side_wr - 50.0) / 100.0))
+
+        def score_state(
+            target_side: str,
+            econ: float,
+            buy: str,
+            c9_a: int,
+            opp_a: int,
+            site: str,
+            fk: str,
+        ) -> Tuple[float, Dict[str, float]]:
+            st_table = VAL_SITE_SCORES_ATK if target_side == "attacker" else VAL_SITE_SCORES_DEF
             c_econ = w["econ_5k"] * (econ / 5000.0)
             c_alive = w["alive_adv_2"] * ((c9_a - opp_a) / 2.0)
             c_fk = w["first_kill"] * VAL_FIRST_KILL_SCORES[fk]
-            c_site = w["spike_state"] * site_table[site]
+            c_site = w["spike_state"] * st_table[site]
             c_buy = w["buy_tier"] * VAL_BUY_SCORES[buy]
-            logit = bias + map_offset + c_econ + c_alive + c_fk + c_site + c_buy
+            logit = bias + map_side_offset(target_side) + c_econ + c_alive + c_fk + c_site + c_buy
             return _sigmoid(logit), {
                 "economy_logit": round(c_econ, 4),
                 "manpower_logit": round(c_alive, 4),
@@ -945,8 +987,8 @@ class CorpusScoutingEngine:
                 "buy_tier_logit": round(c_buy, 4),
             }
 
-        base_p, base_attr = score_state(base_econ, base_buy, base_c9_alive, base_opp_alive, base_site, base_fk)
-        sim_p, sim_attr = score_state(sim_econ, sim_buy, sim_c9_alive, sim_opp_alive, sim_site, sim_fk)
+        base_p, base_attr = score_state(base_side, base_econ, base_buy, base_c9_alive, base_opp_alive, base_site, base_fk)
+        sim_p, sim_attr = score_state(side, sim_econ, sim_buy, sim_c9_alive, sim_opp_alive, sim_site, sim_fk)
 
         # Effective empirical stratum sample count from real corpus rounds
         matched_rounds = sum(
@@ -1031,8 +1073,10 @@ class CorpusScoutingEngine:
         sim_c9_alive = _require_int_range(params.get("c9_alive", base_c9_alive), "c9_alive", 1, 5)
         sim_opp_alive = _require_int_range(params.get("opp_alive", base_opp_alive), "opp_alive", 1, 5)
 
-        base_obj = str(params.get("baseline_objective_decision") or "neutral_lane_reset").strip().lower()
-        sim_obj = str(params.get("objective_decision") or base_obj).strip().lower()
+        raw_base_obj = params.get("baseline_objective_decision", "neutral_lane_reset")
+        base_obj = str(raw_base_obj).strip().lower() if raw_base_obj is not None else "neutral_lane_reset"
+        raw_sim_obj = params.get("objective_decision", base_obj)
+        sim_obj = str(raw_sim_obj).strip().lower() if raw_sim_obj is not None else base_obj
         if base_obj not in LOL_OBJECTIVE_SCORES:
             raise ValueError(f"Invalid baseline_objective_decision '{base_obj}'. Allowed: {sorted(LOL_OBJECTIVE_SCORES)}.")
         if sim_obj not in LOL_OBJECTIVE_SCORES:

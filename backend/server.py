@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import mimetypes
+import threading
 from functools import lru_cache
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -26,6 +27,7 @@ class Strata9Engine:
     def __init__(self, data_dir: str | Path | None = None) -> None:
         self.data_dir = resolve_data_dir(data_dir)
         self.meta = MetaIndex(self.data_dir)
+        self._cache_lock = threading.Lock()
         self._val_cache = lru_cache(maxsize=16)(self._compute_val_series)
         self._lol_cache = lru_cache(maxsize=16)(self._compute_lol_series)
         self.corpus = CorpusScoutingEngine(self)
@@ -54,7 +56,8 @@ class Strata9Engine:
         return parse_val_series(feed, sup, c9_team_id=c9_team_id, series_meta=smeta)
 
     def get_val_series(self, series_id: str, c9_team_id: str = "79") -> Dict[str, Any]:
-        return self._val_cache(series_id, c9_team_id)
+        with self._cache_lock:
+            return self._val_cache(series_id, c9_team_id)
 
     def _compute_lol_series(self, series_id: str, c9_team_id: str) -> Dict[str, Any]:
         feed = self.meta.lol_feeds.get(series_id)
@@ -64,7 +67,8 @@ class Strata9Engine:
         return parse_lol_series(feed, c9_team_id=c9_team_id, series_meta=smeta)
 
     def get_lol_series(self, series_id: str, c9_team_id: str = "47351") -> Dict[str, Any]:
-        return self._lol_cache(series_id, c9_team_id)
+        with self._cache_lock:
+            return self._lol_cache(series_id, c9_team_id)
 
     def get_opponents(self, title: str, team_id: Optional[str] = None) -> Dict[str, Any]:
         tid = team_id or DEFAULT_C9_TEAM.get(title, "79")

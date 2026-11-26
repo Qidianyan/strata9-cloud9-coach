@@ -506,3 +506,54 @@ def test_http_corpus_and_what_if_endpoints(engine: Strata9Engine) -> None:
         srv.server_close()
 
 
+def test_what_if_baseline_side_and_empty_enum_validation(engine: Strata9Engine) -> None:
+    """Verify baseline_side preserves true defender baseline when simulating attacker flip, and empty enums fail."""
+    res = engine.simulate_what_if(
+        {
+            "title": "val",
+            "map": "fracture",
+            "baseline_side": "defender",
+            "side": "attacker",
+            "baseline_site_state": "planted_default",
+            "site_state": "planted_default",
+            "baseline_econ_diff": 0,
+            "econ_diff": 0,
+        }
+    )
+    # On defender with opponent spike planted, baseline prob is lower than attacker with spike planted
+    assert res["baselineWinProb"] < res["simulatedWinProb"]
+    assert res["deltaWinPct"] > 0
+
+    for bad in (
+        {"title": "val", "side": ""},
+        {"title": "val", "baseline_side": "mid"},
+        {"title": "val", "buy_tier": ""},
+        {"title": "lol", "objective_decision": ""},
+    ):
+        with pytest.raises(ValueError):
+            engine.simulate_what_if(bad)
+
+
+def test_corpus_scouting_thread_safety_and_empty_feeds_fallback(data_dir: Path) -> None:
+    """Verify concurrent corpus builds stay race-free and empty feed directories degrade without crashing."""
+    from concurrent.futures import ThreadPoolExecutor
+    from types import SimpleNamespace
+    from backend.corpus_scouting import CorpusScoutingEngine
+
+    fresh_engine = Strata9Engine(data_dir=data_dir)
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        results = list(pool.map(lambda _: fresh_engine.get_corpus_scouting("all"), range(4)))
+    for r in results:
+        assert r["val"]["series_count"] >= 6
+        assert r["lol"]["series_count"] >= 4
+
+    empty_engine = SimpleNamespace(meta=SimpleNamespace(val_feeds={}, lol_feeds={}))
+    empty_corpus = CorpusScoutingEngine(empty_engine)
+    rep = empty_corpus.get_corpus_report("all")
+    assert rep["val"]["series_count"] == 0
+    assert rep["lol"]["series_count"] == 0
+    sim = empty_corpus.simulate_what_if({"title": "val", "econ_diff": 2000, "c9_alive": 4, "opp_alive": 3})
+    assert 0.0 <= sim["wilson_ci_low"] <= sim["simulatedWinProb"] <= sim["wilson_ci_high"] <= 1.0
+
+
+

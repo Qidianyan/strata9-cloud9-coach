@@ -93,19 +93,22 @@ export function WhatIfSimulator({
 
   const reqSeqRef = useRef(0);
 
+  const alignedValEcon = Math.max(-20000, Math.min(20000, Math.round((valSeed?.econDiff ?? 0) / 100) * 100));
+  const alignedLolGold = Math.max(-15000, Math.min(15000, Math.round((lolSeed?.goldDiff ?? 0) / 100) * 100));
+
   // Re-seed sliders whenever selected round / map / game changes
   useEffect(() => {
     if (title === 'val' && valSeed) {
       setSide(valSeed.side);
-      setEconDiff(Math.max(-20000, Math.min(20000, Math.round(valSeed.econDiff / 500) * 500)));
+      setEconDiff(alignedValEcon);
       setBuyTier(valSeed.buyTier);
       setSiteState(valSeed.siteState);
       setFirstKill(valSeed.firstKill);
       setC9Alive(5);
       setOppAlive(5);
     } else if (title === 'lol' && lolSeed) {
-      setGameMinute(Math.max(5, Math.min(50, lolSeed.gameMinute)));
-      setGoldDiff(Math.max(-15000, Math.min(15000, Math.round(lolSeed.goldDiff / 500) * 500)));
+      setGameMinute(Math.max(8, Math.min(45, lolSeed.gameMinute)));
+      setGoldDiff(alignedLolGold);
       setDragonDiff(Math.max(-4, Math.min(4, lolSeed.dragonDiff)));
       setObjectiveDecision('neutral_lane_reset');
       setC9Alive(5);
@@ -115,12 +118,12 @@ export function WhatIfSimulator({
     title,
     valSeed?.map,
     valSeed?.side,
-    valSeed?.econDiff,
+    alignedValEcon,
     valSeed?.buyTier,
     valSeed?.firstKill,
     valSeed?.siteState,
     lolSeed?.gameMinute,
-    lolSeed?.goldDiff,
+    alignedLolGold,
     lolSeed?.dragonDiff,
   ]);
 
@@ -135,8 +138,9 @@ export function WhatIfSimulator({
           ? {
               title: 'val',
               map: valSeed?.map ?? 'all',
+              baseline_side: valSeed?.side ?? 'attacker',
               side,
-              baseline_econ_diff: valSeed?.econDiff ?? 0,
+              baseline_econ_diff: alignedValEcon,
               econ_diff: econDiff,
               baseline_buy_tier: valSeed?.buyTier ?? 'full_buy',
               buy_tier: buyTier,
@@ -152,7 +156,7 @@ export function WhatIfSimulator({
           : {
               title: 'lol',
               game_minute: gameMinute,
-              baseline_gold_diff: lolSeed?.goldDiff ?? 0,
+              baseline_gold_diff: alignedLolGold,
               gold_diff: goldDiff,
               baseline_c9_alive: 5,
               baseline_opp_alive: 5,
@@ -232,7 +236,7 @@ export function WhatIfSimulator({
         setOppAlive(3);
       } else if (preset === 'reset') {
         setSide(valSeed?.side ?? 'attacker');
-        setEconDiff(valSeed?.econDiff ?? 0);
+        setEconDiff(alignedValEcon);
         setBuyTier(valSeed?.buyTier ?? 'full_buy');
         setSiteState(valSeed?.siteState ?? 'unplanted');
         setFirstKill(valSeed?.firstKill ?? 'none');
@@ -241,7 +245,7 @@ export function WhatIfSimulator({
       }
     } else {
       if (preset === 'baron_push') {
-        setGoldDiff(Math.max(2500, goldDiff + 2500));
+        setGoldDiff(Math.min(15000, Math.max(2500, goldDiff + 2500)));
         setObjectiveDecision('secure_baron');
         setC9Alive(5);
         setOppAlive(3);
@@ -256,9 +260,9 @@ export function WhatIfSimulator({
         setC9Alive(5);
         setOppAlive(4);
       } else if (preset === 'reset') {
-        setGameMinute(lolSeed?.gameMinute ?? 22);
-        setGoldDiff(lolSeed?.goldDiff ?? 0);
-        setDragonDiff(lolSeed?.dragonDiff ?? 0);
+        setGameMinute(Math.max(8, Math.min(45, lolSeed?.gameMinute ?? 22)));
+        setGoldDiff(alignedLolGold);
+        setDragonDiff(Math.max(-4, Math.min(4, lolSeed?.dragonDiff ?? 0)));
         setObjectiveDecision('neutral_lane_reset');
         setC9Alive(5);
         setOppAlive(5);
@@ -357,7 +361,7 @@ export function WhatIfSimulator({
                   className="whatif-range"
                   min={-20000}
                   max={20000}
-                  step={500}
+                  step={100}
                   value={econDiff}
                   onChange={(e) => setEconDiff(Number(e.target.value))}
                 />
@@ -445,7 +449,7 @@ export function WhatIfSimulator({
                   className="whatif-range"
                   min={-15000}
                   max={15000}
-                  step={500}
+                  step={100}
                   value={goldDiff}
                   onChange={(e) => setGoldDiff(Number(e.target.value))}
                 />

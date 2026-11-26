@@ -179,4 +179,38 @@ describe('CorpusScoutingPanel', () => {
     expect(screen.getByRole('rowheader', { name: 'Baron Majority' })).toBeInTheDocument();
     expect(screen.getByText(/Ahead >= \+2000g/i)).toBeInTheDocument();
   });
+
+  it('renders graceful empty-feed state when STL_DATA_DIR has zero local feeds checked out', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          generated_from: 'live_grid_zst_corpus',
+          data_dir_mode: 'external_stl_data_dir_read_only',
+          zero_data_committed: true,
+          requested_title: 'val',
+          val: {
+            title: 'val',
+            series_count: 0,
+            maps_count: 0,
+            rounds_count: 0,
+            spatial_casts_count: 0,
+            rolled_back_games_dropped: 0,
+            evidence_series: [],
+            map_matrix: [],
+            economy_matrix: [],
+            opponent_tendencies: [],
+            spatial_hotzones: [],
+            coaching_directives: [],
+          },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    render(<CorpusScoutingPanel title="val" />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/No local VALORANT \.jsonl\.zst feeds found/i)).toBeInTheDocument();
+    });
+  });
 });
