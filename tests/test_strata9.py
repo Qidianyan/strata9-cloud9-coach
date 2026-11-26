@@ -741,5 +741,87 @@ def test_jetbrains_run_configurations_valid_xml() -> None:
         assert cfg is not None and cfg.attrib.get("name")
 
 
+def test_mcp_server_protocol_edge_cases_and_content_length_framing(engine: Strata9Engine) -> None:
+    import io
+    from backend.mcp_coach_server import Strata9McpServer
+
+    mcp = Strata9McpServer(engine)
+
+    # Empty string title must NOT silently coerce to "all"
+    bad_empty = mcp.handle_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 201,
+            "method": "tools/call",
+            "params": {"name": "get_corpus_scouting", "arguments": {"title": ""}},
+        }
+    )
+    assert bad_empty is not None and bad_empty["result"]["isError"] is True
+
+    # JSON-RPC 2.0 §4.1: notifications (no 'id') must NEVER produce responses even on errors
+    for notif in (
+        {"jsonrpc": "2.0", "method": "tools/call", "params": {"name": "nonexistent_tool", "arguments": {}}},
+        {"jsonrpc": "2.0", "method": "tools/call", "params": {"name": "", "arguments": {}}},
+        {"jsonrpc": "2.0", "method": "ping", "params": ["not-an-object"]},
+    ):
+        assert mcp.handle_request(notif) is None
+
+    # Content-Length framed stdio roundtrip (LSP/JetBrains MCP host compatibility)
+    body1 = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "ping"})
+    body2 = json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+    framed_in = (
+        f"Content-Length: {len(body1.encode('utf-8'))}\r\n\r\n{body1}"
+        f"Content-Length: {len(body2.encode('utf-8'))}\r\n\r\n{body2}"
+    )
+    out = io.StringIO()
+    mcp.serve_stdio(stdin=io.StringIO(framed_in), stdout=out)
+    raw_out = out.getvalue()
+    assert raw_out.count("Content-Length:") == 2
+    chunks = [part.split("\r\n\r\n", 1)[1] for part in raw_out.split("Content-Length:") if "\r\n\r\n" in part]
+    parsed = [json.loads(c) for c in chunks]
+    assert parsed[0]["id"] == 1 and parsed[0]["result"] == {}
+    assert parsed[1]["id"] == 2 and len(parsed[1]["result"]["tools"]) == 3
+
+
+def test_mcp_server_real_cli_subprocess_roundtrip(data_dir: Path) -> None:
+    """Spawn real `python -m backend.mcp_coach_server` CLI over stdio pipes."""
+    import subprocess
+    import sys
+
+    project_root = Path(__file__).resolve().parent.parent
+    stdin_payload = "\n".join(
+        [
+            json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}),
+            json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}),
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "get_match_summary",
+                        "arguments": {"title": "val", "series_id": "2748746", "map_index": 0},
+                    },
+                }
+            ),
+        ]
+    ) + "\n"
+    proc = subprocess.run(
+        [sys.executable, "-m", "backend.mcp_coach_server", "--data-dir", str(data_dir)],
+        cwd=str(project_root),
+        input=stdin_payload,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=True,
+    )
+    responses = [json.loads(line) for line in proc.stdout.splitlines() if line.strip()]
+    assert len(responses) == 2
+    assert responses[0]["id"] == 1 and responses[0]["result"]["serverInfo"]["name"] == "strata9-coach-mcp"
+    assert responses[1]["id"] == 2 and responses[1]["result"]["isError"] is False
+    assert responses[1]["result"]["structuredContent"]["maps"][0]["map"] == "fracture"
+
+
+
 
 

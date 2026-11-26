@@ -8,7 +8,7 @@ interface RoundReplayCanvasProps {
   c9Name: string;
   oppName: string;
   attachedBoard?: TelestratorBoardAttachment | null;
-  onAttachBoard?: (attachment: TelestratorBoardAttachment) => void;
+  onAttachBoard?: (attachment: TelestratorBoardAttachment | null) => void;
 }
 
 const SPEEDS = [0.5, 1, 2, 4] as const;

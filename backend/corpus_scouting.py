@@ -867,9 +867,9 @@ class CorpusScoutingEngine:
         }
         return self._lol_corpus
 
-    def get_corpus_report(self, title: str = "all") -> Dict[str, Any]:
+    def get_corpus_report(self, title: Optional[str] = "all") -> Dict[str, Any]:
         """Return aggregated cross-series scouting payload for VAL, LoL, or both."""
-        norm_title = (title or "all").strip().lower()
+        norm_title = "all" if title is None else str(title).strip().lower()
         if norm_title not in ("val", "lol", "all"):
             raise ValueError(f"Unsupported title '{title}'. Expected 'val', 'lol', or 'all'.")
 

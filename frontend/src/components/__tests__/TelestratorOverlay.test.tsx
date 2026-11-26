@@ -235,4 +235,81 @@ describe('TelestratorOverlay', () => {
     expect(summary.annotations[0].geometry).toContain('(10%, 20%) -> (60%, 70%)');
     expect(summary.annotations[1].geometry).toContain('radius 10%');
   });
+
+  it('detaches or resyncs attachedBrief on Undo/Clear and guards canvas export failures', () => {
+    const canvasRef = createRef<HTMLCanvasElement>();
+    const onAttach = vi.fn();
+
+    const { rerender } = render(
+      <TelestratorOverlay
+        baseCanvasRef={canvasRef}
+        mapName="fracture"
+        roundNumber={18}
+        playheadSec={61.4}
+        attachedBoard={null}
+        onAttachBoard={onAttach}
+      >
+        <canvas ref={canvasRef} aria-label="Replay base canvas" width={640} height={356} />
+      </TelestratorOverlay>,
+    );
+
+    // Attach button stays disabled with 0 strokes to avoid empty 0-mark attachments
+    const attachBtn = screen.getByRole('button', { name: /Attach Frame to \.MD Brief/i });
+    expect(attachBtn).toBeDisabled();
+
+    const svg = screen.getByRole('application', { name: /Tactical Telestrator drawing layer/i });
+    vi.spyOn(svg, 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      top: 0,
+      width: 640,
+      height: 356,
+      right: 640,
+      bottom: 356,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+
+    // Draw 2 strokes and attach
+    dragStroke(svg, { x: 80, y: 120 }, { x: 260, y: 200 });
+    dragStroke(svg, { x: 320, y: 140 }, { x: 480, y: 220 });
+    expect(attachBtn).not.toBeDisabled();
+    fireEvent.click(attachBtn);
+    const attached = onAttach.mock.calls[0][0];
+    expect(attached.stroke_count).toBe(2);
+
+    rerender(
+      <TelestratorOverlay
+        baseCanvasRef={canvasRef}
+        mapName="fracture"
+        roundNumber={18}
+        playheadSec={61.4}
+        attachedBoard={attached}
+        onAttachBoard={onAttach}
+      >
+        <canvas ref={canvasRef} aria-label="Replay base canvas" width={640} height={356} />
+      </TelestratorOverlay>,
+    );
+
+    // Undo while attached resyncs attachedBoard to 1 mark (never leaks deleted stroke)
+    fireEvent.click(screen.getByRole('button', { name: /Undo \(2\)/i }));
+    expect(onAttach).toHaveBeenCalledTimes(2);
+    expect(onAttach.mock.calls[1][0].stroke_count).toBe(1);
+
+    // Clear while attached detaches attachedBoard cleanly via null
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+    expect(onAttach).toHaveBeenLastCalledWith(null);
+
+    // Canvas toDataURL throwing error degrades cleanly to null instead of crashing
+    vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockImplementation(() => {
+      throw new Error('tainted canvas');
+    });
+    expect(
+      composeTacticalBoardPng(canvasRef.current, [], {
+        mapName: 'fracture',
+        roundNumber: 18,
+        playheadSec: 61.4,
+      }),
+    ).toBeNull();
+  });
 });

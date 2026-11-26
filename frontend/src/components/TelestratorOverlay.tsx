@@ -1,4 +1,4 @@
-import { type PointerEvent, type ReactNode, type RefObject, useEffect, useState } from 'react';
+import { type PointerEvent, type ReactNode, type RefObject, useEffect, useRef, useState } from 'react';
 import type { TelestratorAnnotationSummary, TelestratorBoardAttachment } from '../types';
 
 export type TelestratorTool = 'arrow' | 'ring' | 'freehand';
@@ -31,7 +31,7 @@ interface TelestratorOverlayProps {
   roundNumber: number;
   playheadSec: number;
   attachedBoard?: TelestratorBoardAttachment | null;
-  onAttachBoard?: (attachment: TelestratorBoardAttachment) => void;
+  onAttachBoard?: (attachment: TelestratorBoardAttachment | null) => void;
   children: ReactNode;
 }
 
@@ -123,7 +123,11 @@ export function composeTacticalBoardPng(
   ctx.fillStyle = '#0B0C0D';
   ctx.fillRect(0, 0, w, h);
   if (baseCanvas && baseCanvas.width > 0 && baseCanvas.height > 0) {
-    ctx.drawImage(baseCanvas, 0, 0, w, h);
+    try {
+      ctx.drawImage(baseCanvas, 0, 0, w, h);
+    } catch {
+      // Keep obsidian backdrop if source canvas cannot be copied
+    }
   }
 
   const scale = Math.max(1, w / 640);
@@ -211,7 +215,11 @@ export function composeTacticalBoardPng(
   ctx.fillStyle = '#F5F2EB';
   ctx.fillText(stamp, w - stW, h - 12 * scale);
 
-  return out.toDataURL('image/png');
+  try {
+    return out.toDataURL('image/png');
+  } catch {
+    return null;
+  }
 }
 
 export function TelestratorOverlay({
@@ -228,12 +236,16 @@ export function TelestratorOverlay({
   const [calloutText, setCalloutText] = useState<string>('');
   const [strokes, setStrokes] = useState<TelestratorStroke[]>([]);
   const [draft, setDraft] = useState<TelestratorStroke | null>(null);
+  const [attachedSignature, setAttachedSignature] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const draftRef = useRef<TelestratorStroke | null>(null);
 
   // Reset drawings cleanly when coach switches map or round
   useEffect(() => {
+    draftRef.current = null;
     setStrokes([]);
     setDraft(null);
+    setAttachedSignature(null);
     setNotice(null);
   }, [mapName, roundNumber]);
 
@@ -255,49 +267,80 @@ export function TelestratorOverlay({
     }
     const pt = toNormalizedPoint(e);
     const cleanedLabel = calloutText.trim();
-    setDraft({
+    const nextDraft: TelestratorStroke = {
       id: `stroke-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       tool,
       color,
       points: [pt, pt],
       label: cleanedLabel || undefined,
-    });
+    };
+    draftRef.current = nextDraft;
+    setDraft(nextDraft);
   };
 
   const handlePointerMove = (e: PointerEvent<SVGSVGElement>) => {
-    if (!draft) return;
+    const current = draftRef.current;
+    if (!current) return;
     const pt = toNormalizedPoint(e);
-    setDraft((prev) => {
-      if (!prev) return null;
-      if (prev.tool === 'freehand') {
-        const last = prev.points[prev.points.length - 1];
-        if (last && dist2d(last, pt) < 0.008) return prev;
-        return { ...prev, points: [...prev.points, pt] };
-      }
-      return { ...prev, points: [prev.points[0], pt] };
-    });
+    let updated: TelestratorStroke;
+    if (current.tool === 'freehand') {
+      const last = current.points[current.points.length - 1];
+      if (last && dist2d(last, pt) < 0.008) return;
+      updated = { ...current, points: [...current.points, pt] };
+    } else {
+      updated = { ...current, points: [current.points[0], pt] };
+    }
+    draftRef.current = updated;
+    setDraft(updated);
   };
 
   const commitDraft = () => {
-    if (!draft) return;
-    const start = draft.points[0];
-    const end = draft.points[draft.points.length - 1];
-    const moved = start && end ? dist2d(start, end) >= 0.015 || draft.points.length >= 3 : false;
+    const current = draftRef.current;
+    if (!current) return;
+    draftRef.current = null;
+    setDraft(null);
+    const start = current.points[0];
+    const end = current.points[current.points.length - 1];
+    const moved = start && end ? dist2d(start, end) >= 0.015 || current.points.length >= 3 : false;
     if (moved) {
-      setStrokes((prev) => [...prev, draft]);
-      if (draft.label) setCalloutText('');
+      setStrokes((prev) => [...prev, current]);
+      if (current.label) setCalloutText('');
     }
+  };
+
+  const cancelDraft = () => {
+    draftRef.current = null;
     setDraft(null);
   };
 
   const handleUndo = () => {
-    setStrokes((prev) => prev.slice(0, -1));
+    const next = strokes.slice(0, -1);
+    setStrokes(next);
+    if (attachedBoard && attachedBoard.map === mapName && attachedBoard.round_number === roundNumber) {
+      if (next.length === 0) {
+        onAttachBoard?.(null);
+        setAttachedSignature(null);
+        setNotice('Last mark undone — detached from brief');
+      } else {
+        const synced = summarizeTelestratorStrokes(next, mapName, roundNumber, playheadSec);
+        onAttachBoard?.(synced);
+        setAttachedSignature(next.map((s) => s.id).join(','));
+        setNotice(`Synced ${synced.stroke_count} marks to Coach .MD/.JSON Export`);
+      }
+    }
   };
 
   const handleClear = () => {
+    draftRef.current = null;
     setStrokes([]);
     setDraft(null);
-    setNotice('Telestrator cleared');
+    setAttachedSignature(null);
+    if (attachedBoard) {
+      onAttachBoard?.(null);
+      setNotice('Telestrator cleared — detached from brief');
+    } else {
+      setNotice('Telestrator cleared');
+    }
   };
 
   const handleSavePng = () => {
@@ -322,17 +365,22 @@ export function TelestratorOverlay({
   };
 
   const handleAttachBrief = () => {
+    if (strokes.length === 0) return;
     const summary = summarizeTelestratorStrokes(strokes, mapName, roundNumber, playheadSec);
     onAttachBoard?.(summary);
+    setAttachedSignature(strokes.map((s) => s.id).join(','));
     setNotice(`Attached ${summary.stroke_count} marks to Coach .MD/.JSON Export`);
   };
 
   const allStrokes = draft ? [...strokes, draft] : strokes;
+  const currentSignature = strokes.map((s) => s.id).join(',');
   const isBoardAttached =
     Boolean(attachedBoard) &&
+    strokes.length > 0 &&
     attachedBoard?.round_number === roundNumber &&
     attachedBoard?.map === mapName &&
-    attachedBoard?.stroke_count === strokes.length;
+    attachedBoard?.stroke_count === strokes.length &&
+    (attachedSignature === null || attachedSignature === currentSignature);
 
   return (
     <div className="telestrator-shell" data-section="telestrator-overlay">
@@ -347,10 +395,18 @@ export function TelestratorOverlay({
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={commitDraft}
-          onPointerCancel={() => setDraft(null)}
+          onPointerCancel={cancelDraft}
         >
           {allStrokes.map((s) => {
             if (s.points.length < 2) return null;
+            if (
+              draft &&
+              s.id === draft.id &&
+              dist2d(s.points[0], s.points[s.points.length - 1]) < 0.005 &&
+              s.points.length < 3
+            ) {
+              return null;
+            }
             const [nx1, ny1] = s.points[0];
             const [nx2, ny2] = s.points[s.points.length - 1];
             const x1 = nx1 * SVG_W;
@@ -486,7 +542,12 @@ export function TelestratorOverlay({
               Save Tactical Board PNG
             </button>
             {onAttachBoard && (
-              <button type="button" className="chip-btn" onClick={handleAttachBrief}>
+              <button
+                type="button"
+                className="chip-btn"
+                disabled={strokes.length === 0}
+                onClick={handleAttachBrief}
+              >
                 {isBoardAttached ? 'Frame Attached to Brief' : 'Attach Frame to .MD Brief'}
               </button>
             )}

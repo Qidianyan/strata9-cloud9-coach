@@ -143,6 +143,9 @@ TOOL_DEFINITIONS: List[Dict[str, Any]] = [
 ]
 
 
+KNOWN_TOOL_NAMES = frozenset(t["name"] for t in TOOL_DEFINITIONS)
+
+
 class Strata9McpServer:
     """Stateless JSON-RPC 2.0 MCP handler delegating directly to Strata9Engine."""
 
@@ -150,8 +153,14 @@ class Strata9McpServer:
         self.engine = engine
 
     def _summarize_match(self, args: Dict[str, Any]) -> Dict[str, Any]:
-        title = str(args.get("title") or "").strip().lower()
-        series_id = str(args.get("series_id") or "").strip()
+        raw_title = args.get("title")
+        if not isinstance(raw_title, str):
+            raise ValueError("Parameter 'title' must be 'val' or 'lol'.")
+        title = raw_title.strip().lower()
+        raw_sid = args.get("series_id")
+        if raw_sid is None or isinstance(raw_sid, bool) or not isinstance(raw_sid, (str, int)):
+            raise ValueError("Parameter 'series_id' is required.")
+        series_id = str(raw_sid).strip()
         if title not in ("val", "lol"):
             raise ValueError("Parameter 'title' must be 'val' or 'lol'.")
         if not series_id:
@@ -237,7 +246,13 @@ class Strata9McpServer:
 
     def _execute_tool(self, name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         if name == "get_corpus_scouting":
-            title = str(arguments.get("title") or "all")
+            raw_title = arguments.get("title")
+            if raw_title is None:
+                title = "all"
+            elif isinstance(raw_title, str):
+                title = raw_title
+            else:
+                raise ValueError("Parameter 'title' must be one of 'val', 'lol', 'all'.")
             return self.engine.get_corpus_scouting(title=title)
         if name == "simulate_tactical_what_if":
             return self.engine.simulate_what_if(arguments)
@@ -269,7 +284,7 @@ class Strata9McpServer:
         if params is None:
             params = {}
         if not isinstance(params, dict):
-            return self._error_response(req_id, -32602, "Invalid params: expected JSON object.")
+            return None if is_notification else self._error_response(req_id, -32602, "Invalid params: expected JSON object.")
 
         if method == "notifications/initialized":
             return None
@@ -296,11 +311,21 @@ class Strata9McpServer:
             tool_name = params.get("name")
             arguments = params.get("arguments")
             if not isinstance(tool_name, str) or not tool_name:
-                return self._error_response(req_id, -32602, "Invalid params: 'name' string is required.")
+                return (
+                    None
+                    if is_notification
+                    else self._error_response(req_id, -32602, "Invalid params: 'name' string is required.")
+                )
             if arguments is None:
                 arguments = {}
             if not isinstance(arguments, dict):
-                return self._error_response(req_id, -32602, "Invalid params: 'arguments' must be an object.")
+                return (
+                    None
+                    if is_notification
+                    else self._error_response(req_id, -32602, "Invalid params: 'arguments' must be an object.")
+                )
+            if tool_name not in KNOWN_TOOL_NAMES:
+                return None if is_notification else self._error_response(req_id, -32602, f"Unknown MCP tool: {tool_name}")
             try:
                 data = self._execute_tool(tool_name, arguments)
                 tool_result = {
@@ -308,8 +333,6 @@ class Strata9McpServer:
                     "structuredContent": data,
                     "isError": False,
                 }
-            except KeyError as exc:
-                return self._error_response(req_id, -32602, str(exc))
             except (ValueError, FileNotFoundError) as exc:
                 tool_result = {
                     "content": [{"type": "text", "text": json.dumps({"error": str(exc)}, ensure_ascii=False)}],
@@ -321,23 +344,53 @@ class Strata9McpServer:
             return None
         return self._error_response(req_id, -32601, f"Method not found: {method}")
 
+    @staticmethod
+    def _write_message(stdout: TextIO, payload: Dict[str, Any], framed: bool) -> None:
+        if framed:
+            body = json.dumps(payload, ensure_ascii=True)
+            stdout.write(f"Content-Length: {len(body.encode('utf-8'))}\r\n\r\n{body}")
+        else:
+            stdout.write(json.dumps(payload, ensure_ascii=False) + "\n")
+        stdout.flush()
+
     def serve_stdio(self, stdin: TextIO = sys.stdin, stdout: TextIO = sys.stdout) -> None:
-        """Serve newline-delimited JSON-RPC 2.0 messages over stdio."""
-        for raw_line in stdin:
+        """Serve JSON-RPC 2.0 messages over stdio (supports both NDJSON and Content-Length framing)."""
+        while True:
+            raw_line = stdin.readline()
+            if not raw_line:
+                break
             line = raw_line.strip()
             if not line:
                 continue
+
+            framed = False
+            payload_text = line
+            if line.lower().startswith("content-length:"):
+                framed = True
+                try:
+                    content_length = int(line.split(":", 1)[1].strip())
+                    if content_length < 0:
+                        raise ValueError("negative Content-Length")
+                except ValueError as exc:
+                    self._write_message(stdout, self._error_response(None, -32700, f"Invalid header: {exc}"), True)
+                    continue
+                # Consume remaining header lines until blank separator line
+                while True:
+                    hdr = stdin.readline()
+                    if not hdr or hdr.strip() == "":
+                        break
+                payload_text = stdin.read(content_length)
+                if not payload_text:
+                    break
+
             try:
-                msg = json.loads(line)
+                msg = json.loads(payload_text)
             except json.JSONDecodeError as exc:
-                resp = self._error_response(None, -32700, f"Parse error: {exc}")
-                stdout.write(json.dumps(resp, ensure_ascii=False) + "\n")
-                stdout.flush()
+                self._write_message(stdout, self._error_response(None, -32700, f"Parse error: {exc}"), framed)
                 continue
             resp = self.handle_request(msg)
             if resp is not None:
-                stdout.write(json.dumps(resp, ensure_ascii=False) + "\n")
-                stdout.flush()
+                self._write_message(stdout, resp, framed)
 
 
 def main() -> None:
