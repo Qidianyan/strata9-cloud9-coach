@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ValMapData, ValReplayEvent, ValReplayTrack, ValRound } from '../types';
+import type { TelestratorBoardAttachment, ValMapData, ValReplayEvent, ValReplayTrack, ValRound } from '../types';
+import { TelestratorOverlay } from './TelestratorOverlay';
 
 interface RoundReplayCanvasProps {
   mapData: ValMapData;
   round: ValRound;
   c9Name: string;
   oppName: string;
+  attachedBoard?: TelestratorBoardAttachment | null;
+  onAttachBoard?: (attachment: TelestratorBoardAttachment) => void;
 }
 
 const SPEEDS = [0.5, 1, 2, 4] as const;
@@ -67,7 +70,14 @@ function describeEvent(ev: ValReplayEvent): string {
   return `${ev.player} cast ${ev.ability} (${ev.slot})`;
 }
 
-export function RoundReplayCanvas({ mapData, round, c9Name, oppName }: RoundReplayCanvasProps) {
+export function RoundReplayCanvas({
+  mapData,
+  round,
+  c9Name,
+  oppName,
+  attachedBoard,
+  onAttachBoard,
+}: RoundReplayCanvasProps) {
   const replay = round.replay;
   const duration = Math.max(5, replay?.duration_sec ?? 60);
   const freezeEnd = replay?.freezetime_end_sec ?? 0;
@@ -414,13 +424,20 @@ export function RoundReplayCanvas({ mapData, round, c9Name, oppName }: RoundRepl
         </span>
       </div>
 
-      <div className="canvas-stage">
+      <TelestratorOverlay
+        baseCanvasRef={canvasRef}
+        mapName={mapData.map}
+        roundNumber={round.round_number}
+        playheadSec={playhead}
+        attachedBoard={attachedBoard}
+        onAttachBoard={onAttachBoard}
+      >
         <canvas
           ref={canvasRef}
           className="replay-canvas"
           aria-label={`Canvas2D animated round replay for ${mapData.map} Round ${round.round_number}`}
         />
-      </div>
+      </TelestratorOverlay>
 
       <div className="replay-transport">
         <div className="transport-row">

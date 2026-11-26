@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { ValSeriesResponse, WhatIfResponse } from '../types';
+import type { TelestratorBoardAttachment, ValSeriesResponse, WhatIfResponse } from '../types';
 import { AiCoachPanel } from './AiCoachPanel';
 import { RoundReplayCanvas } from './RoundReplayCanvas';
 import { SpatialHeatmap } from './SpatialHeatmap';
@@ -21,10 +21,12 @@ export function ValDeepDive({ series }: ValDeepDiveProps) {
   const [mapIdx, setMapIdx] = useState(0);
   const [selectedRoundNum, setSelectedRoundNum] = useState<number>(1);
   const [attachedWhatIf, setAttachedWhatIf] = useState<WhatIfResponse | null>(null);
+  const [attachedBoard, setAttachedBoard] = useState<TelestratorBoardAttachment | null>(null);
 
   useEffect(() => {
     setMapIdx(0);
     setAttachedWhatIf(null);
+    setAttachedBoard(null);
     const firstMap = series.maps[0];
     if (firstMap) {
       const topTp = firstMap.top_turning_points[0];
@@ -34,6 +36,7 @@ export function ValDeepDive({ series }: ValDeepDiveProps) {
 
   useEffect(() => {
     setAttachedWhatIf(null);
+    setAttachedBoard(null);
   }, [mapIdx, selectedRoundNum]);
 
   const activeMap = series.maps[mapIdx] ?? series.maps[0];
@@ -319,6 +322,8 @@ export function ValDeepDive({ series }: ValDeepDiveProps) {
             round={selectedRound}
             c9Name={series.c9_team_name}
             oppName={series.opponent_name}
+            attachedBoard={attachedBoard}
+            onAttachBoard={(b) => setAttachedBoard(b)}
           />
           <AiCoachPanel
             title="val"
@@ -344,6 +349,7 @@ export function ValDeepDive({ series }: ValDeepDiveProps) {
               headline: selectedRound.headline,
               telemetryPrescription: selectedRound.coaching_prescription,
               whatIfSimulation: attachedWhatIf,
+              telestratorBoard: attachedBoard,
               keyEvents: (selectedRound.replay?.events ?? [])
                 .filter((ev) => ['kill', 'plant', 'defuse', 'explode'].includes(ev.kind))
                 .map((ev) => ({

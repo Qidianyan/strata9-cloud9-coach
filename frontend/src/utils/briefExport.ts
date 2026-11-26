@@ -1,4 +1,10 @@
-import type { CoachAskResponse, CoachBriefResponse, TitleId, WhatIfResponse } from '../types';
+import type {
+  CoachAskResponse,
+  CoachBriefResponse,
+  TelestratorBoardAttachment,
+  TitleId,
+  WhatIfResponse,
+} from '../types';
 
 export interface CoachingExportEvent {
   clock_label: string;
@@ -24,6 +30,7 @@ export interface CoachingExportContext {
   telemetryPrescription?: string;
   keyEvents: CoachingExportEvent[];
   whatIfSimulation?: WhatIfResponse | null;
+  telestratorBoard?: TelestratorBoardAttachment | null;
 }
 
 export interface CoachingBriefExportPayload {
@@ -51,6 +58,7 @@ export interface CoachingBriefExportPayload {
     key_events: CoachingExportEvent[];
   };
   what_if_simulation: WhatIfResponse | null;
+  telestrator_board: TelestratorBoardAttachment | null;
   brief: CoachBriefResponse;
   qa: CoachAskResponse | null;
 }
@@ -103,13 +111,14 @@ export function buildBriefPayload(params: {
       key_events: telemetry?.keyEvents ?? [],
     },
     what_if_simulation: telemetry?.whatIfSimulation ?? null,
+    telestrator_board: telemetry?.telestratorBoard ?? null,
     brief,
     qa,
   };
 }
 
 export function buildBriefMarkdown(payload: CoachingBriefExportPayload): string {
-  const { context, telemetry, what_if_simulation: whatIf, brief, qa } = payload;
+  const { context, telemetry, what_if_simulation: whatIf, telestrator_board: board, brief, qa } = payload;
   const lines: string[] = [
     '# Strata9 Tactical Coaching Brief',
     '',
@@ -188,6 +197,19 @@ export function buildBriefMarkdown(payload: CoachingBriefExportPayload): string 
     );
     for (const act of whatIf.counter_actions) {
       lines.push(`- **Counter Action**: ${act}`);
+    }
+  }
+
+  if (board) {
+    lines.push(
+      '',
+      '## Tactical Board Telestrator Annotations',
+      `- **Frame**: ${board.map.toUpperCase()} R${board.round_number} at T+${board.playhead_sec.toFixed(1)}s`,
+      `- **Composite Board PNG**: \`${board.board_filename}\` (${board.stroke_count} coach annotations)`,
+    );
+    for (const ann of board.annotations) {
+      const labelPart = ann.label ? ` "${ann.label}"` : '';
+      lines.push(`- **#${ann.index} [${ann.tool.toUpperCase()} / ${ann.color_name}]**${labelPart}: ${ann.geometry}`);
     }
   }
 

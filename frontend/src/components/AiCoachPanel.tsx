@@ -175,13 +175,21 @@ export function AiCoachPanel({
         </div>
       )}
 
-      {telemetryExport?.whatIfSimulation && (
+      {(telemetryExport?.whatIfSimulation || telemetryExport?.telestratorBoard) && (
         <div className="audit-strip" style={{ marginTop: 0, marginBottom: 10 }}>
-          <span className="audit-chip mono">
-            What-If Attached: {(telemetryExport.whatIfSimulation.simulatedWinProb * 100).toFixed(1)}% (
-            {telemetryExport.whatIfSimulation.deltaWinPct >= 0 ? '+' : ''}
-            {telemetryExport.whatIfSimulation.deltaWinPct.toFixed(1)}pp) included in Export .MD/.JSON
-          </span>
+          {telemetryExport.whatIfSimulation && (
+            <span className="audit-chip mono">
+              What-If Attached: {(telemetryExport.whatIfSimulation.simulatedWinProb * 100).toFixed(1)}% (
+              {telemetryExport.whatIfSimulation.deltaWinPct >= 0 ? '+' : ''}
+              {telemetryExport.whatIfSimulation.deltaWinPct.toFixed(1)}pp) included in Export .MD/.JSON
+            </span>
+          )}
+          {telemetryExport.telestratorBoard && (
+            <span className="audit-chip mono">
+              Telestrator Attached: R{telemetryExport.telestratorBoard.round_number} (
+              {telemetryExport.telestratorBoard.stroke_count} marks) included in Export .MD/.JSON
+            </span>
+          )}
         </div>
       )}
 

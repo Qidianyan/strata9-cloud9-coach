@@ -128,7 +128,7 @@ async function main() {
       fullPage: false,
     });
 
-    // Screenshot 5: Champion Deck — Canvas2D Round Replay + Live AI Tactical Coach
+    // Screenshot 5 & V5 Telestrator: Real mouse-drawn Arrow + Ring + Freehand on Canvas2D + Attach to Brief
     await page.evaluate(() => {
       const el = document.querySelector('[data-section="replay-coach-deck"]');
       if (el) el.scrollIntoView({ block: 'start' });
@@ -137,14 +137,57 @@ async function main() {
     await page.getByRole('button', { name: /Play Round/i }).click();
     await page.waitForTimeout(450);
     await page.getByRole('button', { name: /Pause/i }).click();
+
+    // Draw real broadcast Telestrator annotations with mouse on Fracture R18 replay!
+    const teleSvg = page.locator('svg[aria-label*="Tactical Telestrator drawing layer"]');
+    await teleSvg.waitFor({ state: 'visible', timeout: 10000 });
+    const box = await teleSvg.boundingBox();
+    if (!box) throw new Error('Telestrator SVG bounding box unavailable');
+
+    // 1) Molten Gold Arrow with callout tag
+    await page.getByLabel('Tactical callout label').fill('A-Drop Pinch');
+    await page.mouse.move(box.x + box.width * 0.28, box.y + box.height * 0.72);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.56, box.y + box.height * 0.42, { steps: 10 });
+    await page.mouse.up();
+
+    // 2) Crimson Flame Ring around Spike/crossfire zone
+    await page.locator('[data-section="telestrator-overlay"] button', { hasText: 'Ring' }).click();
+    await page.getByRole('button', { name: /Pen color Crimson Flame/i }).click();
+    await page.getByLabel('Tactical callout label').fill('Retake Zone');
+    await page.mouse.move(box.x + box.width * 0.58, box.y + box.height * 0.62);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.67, box.y + box.height * 0.62, { steps: 8 });
+    await page.mouse.up();
+
+    // 3) Emerald Signal Freehand flank route
+    await page.locator('[data-section="telestrator-overlay"] button', { hasText: 'Freehand' }).click();
+    await page.getByRole('button', { name: /Pen color Emerald Signal/i }).click();
+    await page.mouse.move(box.x + box.width * 0.42, box.y + box.height * 0.24);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.52, box.y + box.height * 0.34, { steps: 6 });
+    await page.mouse.move(box.x + box.width * 0.57, box.y + box.height * 0.54, { steps: 6 });
+    await page.mouse.up();
+
+    const drawnCount = await page.locator('svg[aria-label*="Tactical Telestrator"] g[data-stroke-tool]').count();
+    if (drawnCount !== 3) {
+      throw new Error(`Expected 3 drawn telestrator strokes on canvas, got ${drawnCount}`);
+    }
+    await page.getByRole('button', { name: /Attach Frame to \.MD Brief/i }).click();
+    await page.locator('text=Telestrator Attached:').waitFor({ state: 'visible', timeout: 10000 });
+
     await page.locator('section[aria-label="Strata9 AI Tactical Coach"] button.chip-btn', { hasText: 'Diagnose' }).first().click();
     await page.locator('.coach-answer-card').waitFor({ state: 'visible', timeout: 45000 });
     await page.waitForTimeout(300);
     await page.screenshot({
+      path: path.join(SHOTS_DIR, 'after_v5_telestrator.png'),
+      fullPage: false,
+    });
+    await page.screenshot({
       path: path.join(MATERIALS_DIR, '05_strata9_round_replay_ai_coach.png'),
       fullPage: false,
     });
-    console.log('[E2E] Canvas2D Round Replay + AI Tactical Coach Q&A verified & captured (05).');
+    console.log('[E2E] Canvas2D Round Replay + Telestrator (3 real mouse strokes) + AI Coach Q&A verified & captured.');
 
     // Screenshot 2: Interactive Tactical What-If Sandbox + Spatial Heatmap
     await page.evaluate(() => {

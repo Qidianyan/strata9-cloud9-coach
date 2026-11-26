@@ -767,3 +767,22 @@ export interface WhatIfResponse {
   coaching_decision: string;
   counter_actions: string[];
 }
+
+export interface TelestratorAnnotationSummary {
+  index: number;
+  tool: 'arrow' | 'ring' | 'freehand';
+  color_name: string;
+  color_hex: string;
+  label?: string;
+  geometry: string;
+}
+
+export interface TelestratorBoardAttachment {
+  map: string;
+  round_number: number;
+  playhead_sec: number;
+  board_filename: string;
+  stroke_count: number;
+  annotations: TelestratorAnnotationSummary[];
+  captured_at: string;
+}

@@ -556,4 +556,190 @@ def test_corpus_scouting_thread_safety_and_empty_feeds_fallback(data_dir: Path) 
     assert 0.0 <= sim["wilson_ci_low"] <= sim["simulatedWinProb"] <= sim["wilson_ci_high"] <= 1.0
 
 
+def test_mcp_server_initialize_and_tools_list(engine: Strata9Engine) -> None:
+    from backend.mcp_coach_server import Strata9McpServer
+
+    mcp = Strata9McpServer(engine)
+    init_resp = mcp.handle_request({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
+    assert init_resp is not None
+    assert init_resp["result"]["serverInfo"]["name"] == "strata9-coach-mcp"
+    assert "tools" in init_resp["result"]["capabilities"]
+
+    notif = mcp.handle_request({"jsonrpc": "2.0", "method": "notifications/initialized"})
+    assert notif is None
+
+    list_resp = mcp.handle_request({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+    assert list_resp is not None
+    names = [t["name"] for t in list_resp["result"]["tools"]]
+    assert names == ["get_corpus_scouting", "simulate_tactical_what_if", "get_match_summary"]
+
+
+def test_mcp_server_tools_call_real_data(engine: Strata9Engine) -> None:
+    from backend.mcp_coach_server import Strata9McpServer
+
+    mcp = Strata9McpServer(engine)
+
+    # 1. get_corpus_scouting
+    r1 = mcp.handle_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 10,
+            "method": "tools/call",
+            "params": {"name": "get_corpus_scouting", "arguments": {"title": "val"}},
+        }
+    )
+    assert r1 is not None and r1["result"]["isError"] is False
+    c_data = json.loads(r1["result"]["content"][0]["text"])
+    assert c_data["val"]["series_count"] >= 6
+    assert c_data["zero_data_committed"] is True
+
+    # 2. simulate_tactical_what_if
+    r2 = mcp.handle_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 11,
+            "method": "tools/call",
+            "params": {
+                "name": "simulate_tactical_what_if",
+                "arguments": {
+                    "title": "val",
+                    "map": "fracture",
+                    "baseline_side": "defender",
+                    "side": "attacker",
+                    "econ_diff": 4000,
+                    "c9_alive": 5,
+                    "opp_alive": 3,
+                    "site_state": "planted_crossfire",
+                    "first_kill": "c9",
+                },
+            },
+        }
+    )
+    assert r2 is not None and r2["result"]["isError"] is False
+    sim_data = r2["result"]["structuredContent"]
+    assert 0.0 <= sim_data["wilson_ci_low"] <= sim_data["simulatedWinProb"] <= sim_data["wilson_ci_high"] <= 1.0
+    assert sim_data["deltaWinPct"] > 0
+
+    # 3. get_match_summary (VAL + LoL)
+    r3 = mcp.handle_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 12,
+            "method": "tools/call",
+            "params": {"name": "get_match_summary", "arguments": {"title": "val", "series_id": "2748746", "map_index": 0}},
+        }
+    )
+    assert r3 is not None and r3["result"]["isError"] is False
+    val_sum = r3["result"]["structuredContent"]
+    assert val_sum["series_score"] == "2-0"
+    assert val_sum["maps"][0]["map"] == "fracture"
+
+    r4 = mcp.handle_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 13,
+            "method": "tools/call",
+            "params": {"name": "get_match_summary", "arguments": {"title": "lol", "series_id": "2754509", "map_index": 1}},
+        }
+    )
+    assert r4 is not None and r4["result"]["isError"] is False
+    lol_sum = r4["result"]["structuredContent"]
+    assert lol_sum["games"][0]["game_number"] == 2
+
+
+def test_mcp_server_error_handling_invalid_method_and_params(engine: Strata9Engine) -> None:
+    from backend.mcp_coach_server import Strata9McpServer
+
+    mcp = Strata9McpServer(engine)
+    bad_method = mcp.handle_request({"jsonrpc": "2.0", "id": 99, "method": "unknown/method"})
+    assert bad_method is not None and bad_method["error"]["code"] == -32601
+
+    bad_tool = mcp.handle_request(
+        {"jsonrpc": "2.0", "id": 100, "method": "tools/call", "params": {"name": "nonexistent_tool", "arguments": {}}}
+    )
+    assert bad_tool is not None and bad_tool["error"]["code"] == -32602
+
+    bad_args = mcp.handle_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 101,
+            "method": "tools/call",
+            "params": {"name": "simulate_tactical_what_if", "arguments": {"title": "val", "econ_diff": "NaN"}},
+        }
+    )
+    assert bad_args is not None and bad_args["result"]["isError"] is True
+    assert "error" in json.loads(bad_args["result"]["content"][0]["text"])
+
+    missing_series = mcp.handle_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 102,
+            "method": "tools/call",
+            "params": {"name": "get_match_summary", "arguments": {"title": "val", "series_id": "9999999"}},
+        }
+    )
+    assert missing_series is not None and missing_series["result"]["isError"] is True
+
+
+def test_mcp_server_stdio_pipe_roundtrip(engine: Strata9Engine) -> None:
+    import io
+    from backend.mcp_coach_server import Strata9McpServer
+
+    mcp = Strata9McpServer(engine)
+    lines = "\n".join(
+        [
+            json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}),
+            json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}),
+            json.dumps({"jsonrpc": "2.0", "id": 2, "method": "ping"}),
+            "{malformed json",
+            json.dumps({"jsonrpc": "2.0", "id": 3, "method": "tools/list"}),
+        ]
+    ) + "\n"
+    out = io.StringIO()
+    mcp.serve_stdio(stdin=io.StringIO(lines), stdout=out)
+    responses = [json.loads(line) for line in out.getvalue().splitlines() if line.strip()]
+    assert len(responses) == 4
+    assert responses[0]["id"] == 1
+    assert responses[1]["id"] == 2 and responses[1]["result"] == {}
+    assert responses[2]["error"]["code"] == -32700
+    assert responses[3]["id"] == 3 and len(responses[3]["result"]["tools"]) == 3
+
+
+def test_jetbrains_http_client_collection_valid() -> None:
+    http_path = Path(__file__).resolve().parent.parent / "jetbrains" / "strata9-coaching.http"
+    assert http_path.is_file()
+    text = http_path.read_text(encoding="utf-8")
+    for expected in (
+        "/api/health",
+        "/api/overview",
+        "/api/val/series/",
+        "/api/lol/series/",
+        "/api/scouting/corpus",
+        "/api/tactical/what-if",
+        "/api/scouting/dossier",
+        "/api/coach/ask",
+        "client.test(",
+    ):
+        assert expected in text, f"Missing {expected} in jetbrains/strata9-coaching.http"
+
+
+def test_jetbrains_run_configurations_valid_xml() -> None:
+    import xml.etree.ElementTree as ET
+
+    run_dir = Path(__file__).resolve().parent.parent / ".run"
+    expected_files = [
+        "Strata9 Backend.run.xml",
+        "Strata9 Frontend.run.xml",
+        "Strata9 MCP Coach Server.run.xml",
+    ]
+    for fname in expected_files:
+        fp = run_dir / fname
+        assert fp.is_file(), f"Missing JetBrains Run Config: {fname}"
+        root = ET.parse(fp).getroot()
+        assert root.tag == "component"
+        cfg = root.find("configuration")
+        assert cfg is not None and cfg.attrib.get("name")
+
+
+
 

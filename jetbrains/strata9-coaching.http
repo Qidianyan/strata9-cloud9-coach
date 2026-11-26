@@ -1,0 +1,203 @@
+### Strata9 — Cloud9 × JetBrains HTTP Client Companion Collection
+### Open directly in PyCharm, WebStorm, or IntelliJ IDEA and click the gutter Run icon.
+### Start backend first using shared Run Configuration: "Strata9 Backend" (port 8799).
+
+@host = http://127.0.0.1:8799
+@valSeriesId = 2748746
+@valRollbackSeriesId = 2775953
+@lolSeriesId = 2754509
+@c9ValTeamId = 79
+@nrgValTeamId = 97
+
+### 1. Health & Zero-Data-Leak Runtime Audit
+GET {{host}}/api/health
+Accept: application/json
+
+> {%
+    client.test("Health status is ok & read-only external STL_DATA_DIR active", function () {
+        client.assert(response.status === 200, "Expected HTTP 200");
+        client.assert(response.body.status === "ok", "Service should report ok");
+        client.assert(response.body.license_mode === "read_only_streaming_external_stl_data_dir", "External read-only mode required");
+        client.assert(response.body.local_val_series.length >= 6, "Expected >= 6 local VAL feeds");
+        client.assert(response.body.local_lol_series.length >= 4, "Expected >= 4 local LoL feeds");
+    });
+%}
+
+### 2. Global Metadata Corpus Overview (session_valid == True enforced)
+GET {{host}}/api/overview
+Accept: application/json
+
+> {%
+    client.test("Corpus overview indexes all 205 teams & 3 Cloud9 squads", function () {
+        client.assert(response.status === 200, "Expected HTTP 200");
+        client.assert(response.body.corpus_stats.teams === 205, "Expected 205 official GRID teams");
+        client.assert(response.body.corpus_stats.invalid_games_excluded > 0, "Invalid GRID sessions must be excluded");
+        client.assert(response.body.cloud9_squads.length === 3, "Expected Cloud9, Cloud9 GC, and Cloud9 Kia");
+    });
+%}
+
+### 3. VALORANT Live Stream — Cloud9 vs NRG (2748746, Fracture 14-12 OT + Spatial Supplements)
+GET {{host}}/api/val/series/{{valSeriesId}}
+Accept: application/json
+
+> {%
+    client.test("VAL 2748746 parses Fracture 14-12 with spatial casts & R18 Canvas2D tracks", function () {
+        client.assert(response.status === 200, "Expected HTTP 200");
+        client.assert(response.body.series_score === "2-0", "Expected Cloud9 2-0 NRG");
+        client.assert(response.body.maps[0].map === "fracture", "Map 1 should be Fracture");
+        client.assert(response.body.telemetry_audit.ability_supplement.joined_usable > 1000, "Expected >1000 spatial casts joined");
+    });
+%}
+
+### 4. VALORANT Rollback Resilience — Cloud9 vs NRG (2775953, drops series-!started-game)
+GET {{host}}/api/val/series/{{valRollbackSeriesId}}
+Accept: application/json
+
+> {%
+    client.test("VAL 2775953 drops abandoned map restart rollback cleanly", function () {
+        client.assert(response.status === 200, "Expected HTTP 200");
+        client.assert(response.body.telemetry_audit.rolled_back_games_dropped === 1, "Expected 1 rolled-back game dropped");
+        client.assert(response.body.maps.length === 3, "Expected 3 valid final maps");
+    });
+%}
+
+### 5. League of Legends Live Stream — Cloud9 Kia vs FlyQuest (2754509, Bo3 Macro Tempo)
+GET {{host}}/api/lol/series/{{lolSeriesId}}
+Accept: application/json
+
+> {%
+    client.test("LoL 2754509 parses Cloud9 Kia 2-1 FlyQuest with macro swings", function () {
+        client.assert(response.status === 200, "Expected HTTP 200");
+        client.assert(response.body.series_score === "2-1", "Expected Cloud9 Kia 2-1 FlyQuest");
+        client.assert(response.body.games.length === 3, "Expected 3 games");
+        client.assert(response.body.games[1].top_macro_swings.length >= 3, "Expected Game 2 macro swings");
+    });
+%}
+
+### 6. Cross-Series GRID Corpus Scouting Matrix (VAL + LoL + Wilson 95% CI)
+GET {{host}}/api/scouting/corpus?title=all
+Accept: application/json
+
+> {%
+    client.test("Cross-series corpus aggregates all local VAL & LoL .zst feeds", function () {
+        client.assert(response.status === 200, "Expected HTTP 200");
+        client.assert(response.body.zero_data_committed === true, "Zero data committed flag required");
+        client.assert(response.body.val.series_count >= 6, "Expected >= 6 VAL series aggregated");
+        client.assert(response.body.lol.series_count >= 4, "Expected >= 4 LoL series aggregated");
+    });
+%}
+
+### 7. Tactical What-If Simulation — VALORANT Fracture 5v3 Attack Execute
+POST {{host}}/api/tactical/what-if
+Content-Type: application/json
+
+{
+  "title": "val",
+  "map": "fracture",
+  "baseline_side": "defender",
+  "side": "attacker",
+  "baseline_econ_diff": -4800,
+  "econ_diff": 4000,
+  "baseline_buy_tier": "full_buy",
+  "buy_tier": "full_buy",
+  "baseline_c9_alive": 5,
+  "baseline_opp_alive": 5,
+  "c9_alive": 5,
+  "opp_alive": 3,
+  "baseline_site_state": "planted_default",
+  "site_state": "planted_default",
+  "baseline_first_kill": "opp",
+  "first_kill": "c9"
+}
+
+> {%
+    client.test("VAL What-If returns bounded Wilson 95% CI and positive EV gain", function () {
+        client.assert(response.status === 200, "Expected HTTP 200");
+        client.assert(response.body.simulatedWinProb > response.body.baselineWinProb, "5v3 Attack should beat Defender deficit");
+        client.assert(response.body.wilson_ci_low >= 0 && response.body.wilson_ci_high <= 1, "Wilson CI must stay in [0, 1]");
+        client.assert(response.body.deltaWinPct > 0, "Expected positive deltaWinPct");
+    });
+%}
+
+### 8. Tactical What-If Simulation — LoL Cloud9 Kia 5v3 Baron Commit
+POST {{host}}/api/tactical/what-if
+Content-Type: application/json
+
+{
+  "title": "lol",
+  "game_minute": 22,
+  "baseline_gold_diff": 500,
+  "gold_diff": 4000,
+  "baseline_c9_alive": 5,
+  "baseline_opp_alive": 5,
+  "c9_alive": 5,
+  "opp_alive": 3,
+  "baseline_objective_decision": "neutral_lane_reset",
+  "objective_decision": "secure_baron",
+  "baseline_dragon_diff": 0,
+  "dragon_diff": 2
+}
+
+> {%
+    client.test("LoL What-If Baron Commit yields strong positive macro EV", function () {
+        client.assert(response.status === 200, "Expected HTTP 200");
+        client.assert(response.body.deltaWinPct > 10, "Expected > +10pp EV gain for 5v3 Baron");
+    });
+%}
+
+### 9. Tactical What-If Boundary Guard — Reject NaN Payload (HTTP 400)
+POST {{host}}/api/tactical/what-if
+Content-Type: application/json
+
+{
+  "title": "val",
+  "econ_diff": "NaN"
+}
+
+> {%
+    client.test("What-If rejects NaN with HTTP 400", function () {
+        client.assert(response.status === 400, "Expected HTTP 400 on NaN input");
+    });
+%}
+
+### 10. Pre-Match Opponent Scouting Dossier (Markdown Export)
+GET {{host}}/api/scouting/dossier?title=val&team_id={{c9ValTeamId}}&opponent_id={{nrgValTeamId}}&format=markdown
+Accept: text/markdown
+
+> {%
+    client.test("Markdown dossier renders Cloud9 vs NRG scouting report", function () {
+        client.assert(response.status === 200, "Expected HTTP 200");
+        client.assert(response.body.indexOf("# Strata9 Pre-Match Scouting Dossier") >= 0, "Missing Markdown header");
+    });
+%}
+
+### 11. AI Tactical Coach — Model Policy Status & Post-Match Brief
+GET {{host}}/api/coach/status
+Accept: application/json
+
+> {%
+    client.test("AI Coach policy blocks gemini-3.8*", function () {
+        client.assert(response.status === 200, "Expected HTTP 200");
+        client.assert(response.body.forbidden_prefixes.indexOf("gemini-3.8") >= 0, "gemini-3.8 must be blocked");
+    });
+%}
+
+### 12. AI Tactical Coach — Grounded Tactical Q&A (Fracture R18)
+POST {{host}}/api/coach/ask
+Content-Type: application/json
+
+{
+  "title": "val",
+  "series_id": "{{valSeriesId}}",
+  "map_index": 0,
+  "round_number": 18,
+  "question": "Diagnose Cloud9 Fracture R18 retake spacing and prescribe one scrim drill."
+}
+
+> {%
+    client.test("AI Coach returns grounded answer and scrim drills", function () {
+        client.assert(response.status === 200, "Expected HTTP 200");
+        client.assert(response.body.answer.length > 20, "Expected non-empty tactical answer");
+        client.assert(response.body.drills.length >= 1, "Expected >= 1 drill");
+    });
+%}
