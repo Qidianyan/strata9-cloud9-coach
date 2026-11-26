@@ -78,7 +78,7 @@ export function SpatialHeatmap({ mapData, selectedRound, c9Name, oppName }: Spat
       <div className="panel-header">
         <div>
           <h2 className="panel-title">
-            03 // Spatial Ability-Cast Radar: {mapData.map.toUpperCase()}
+            04 // Spatial Ability-Cast Radar: {mapData.map.toUpperCase()}
           </h2>
           <p className="panel-subtitle">
             Real 3D positions and aim vectors joined from{' '}

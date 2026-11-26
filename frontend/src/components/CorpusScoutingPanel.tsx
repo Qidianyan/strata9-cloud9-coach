@@ -145,8 +145,8 @@ export function CorpusScoutingPanel({ title, onOpenLocalSeries }: CorpusScouting
                       <div className="tier-bar-fill" style={{ width: `${Math.max(4, Math.min(100, e.winrate))}%` }} />
                     </div>
                     <div className="kpi-meta mono">
-                      95% CI: {e.wilson_ci_low}% to {e.wilson_ci_high}% | Avg Econ {e.avg_econ_diff >= 0 ? '+' : ''}$
-                      {e.avg_econ_diff.toLocaleString()}
+                      95% CI: {e.wilson_ci_low}% to {e.wilson_ci_high}% | Avg Econ {e.avg_econ_diff >= 0 ? '+$' : '-$'}
+                      {Math.abs(e.avg_econ_diff).toLocaleString()}
                     </div>
                   </div>
                 ))}

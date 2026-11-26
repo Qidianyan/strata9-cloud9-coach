@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Assemble Strata9 V3 1080p Esports Broadcast Demo Film + Synchronized SRT."""
+"""Assemble Strata9 V6 1080p Esports Broadcast Demo Film + Synchronized SRT."""
 
 from __future__ import annotations
 
@@ -377,12 +377,12 @@ def main() -> None:
         scratch / "ffmpeg_final.log",
     )
 
-    # Extract 8 verification frames spanning all 4 acts including final export confirmation
+    # Extract 9 verification frames spanning all V6 highlights (Console, Replay, Telestrator, What-If, Corpus, LoL, AI Coach, JetBrains)
     frames_dir = scratch / "frames"
     for old_f in frames_dir.glob("*.png"):
         old_f.unlink()
     frames_dir.mkdir(exist_ok=True)
-    for ts in [5, 20, 38, 51, 56, 62, 74, 85]:
+    for ts in [5, 20, 36, 46, 52, 58, 65, 76, 86]:
         run_ffmpeg(
             ["-ss", str(ts), "-i", str(mp4_path), "-frames:v", "1", "-q:v", "2", str(frames_dir / f"frame_{ts:02d}s.png")],
             scratch / f"ffmpeg_frame_{ts}.log",

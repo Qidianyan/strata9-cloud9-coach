@@ -421,7 +421,7 @@ export function LolMacroView({ series }: LolMacroViewProps) {
         <section className="panel" aria-label="Top 5 Macro Swing Windows">
           <div className="panel-header">
             <div>
-              <h2 className="panel-title">03 // Top Macro Swing Windows</h2>
+              <h2 className="panel-title">04 // Top Macro Swing Windows</h2>
               <p className="panel-subtitle">Select any 2-minute window to highlight it on the Gold Curve</p>
             </div>
           </div>
@@ -459,7 +459,7 @@ export function LolMacroView({ series }: LolMacroViewProps) {
         <section className="panel" aria-label="Objective Chronology">
           <div className="panel-header">
             <div>
-              <h2 className="panel-title">04 // Objective &amp; Structure Chronology</h2>
+              <h2 className="panel-title">05 // Objective &amp; Structure Chronology</h2>
               <p className="panel-subtitle">{game.objectives.length} verified GRID objective events</p>
             </div>
             <div className="segmented" role="group" aria-label="Filter objectives">

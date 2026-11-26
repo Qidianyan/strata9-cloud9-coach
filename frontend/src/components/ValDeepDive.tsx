@@ -280,7 +280,8 @@ export function ValDeepDive({ series }: ValDeepDiveProps) {
               <div className="mini-stat">
                 <div className="mini-stat-label">Economy Diff</div>
                 <div className="mini-stat-value">
-                  {selectedRound.econ_diff >= 0 ? '+' : ''}${selectedRound.econ_diff.toLocaleString()}
+                  {selectedRound.econ_diff >= 0 ? '+$' : '-$'}
+                  {Math.abs(selectedRound.econ_diff).toLocaleString()}
                 </div>
               </div>
               <div className="mini-stat">
@@ -338,7 +339,7 @@ export function ValDeepDive({ series }: ValDeepDiveProps) {
               wpSwing: `${selectedRound.wp_swing >= 0 ? '+' : ''}${selectedRound.wp_swing}%`,
               impactScore: selectedRound.impact_score,
               swingTag: selectedRound.swing_tag,
-              econDiff: `${selectedRound.econ_diff >= 0 ? '+' : ''}$${selectedRound.econ_diff.toLocaleString()}`,
+              econDiff: `${selectedRound.econ_diff >= 0 ? '+$' : '-$'}${Math.abs(selectedRound.econ_diff).toLocaleString()}`,
               buyMatchup: `${selectedRound.c9_buy_class} vs ${selectedRound.opp_buy_class}`,
               openingDuel: selectedRound.first_kill
                 ? `${selectedRound.first_kill.killer} (${selectedRound.first_kill.killer_team}) > ${selectedRound.first_kill.victim}`
@@ -416,7 +417,7 @@ export function ValDeepDive({ series }: ValDeepDiveProps) {
         <section className="panel" aria-label="Top 5 Turning-Point Coach Prescriptions">
           <div className="panel-header">
             <div>
-              <h2 className="panel-title">04 // Top 5 Crucial Swing Rounds</h2>
+              <h2 className="panel-title">05 // Top 5 Crucial Swing Rounds</h2>
               <p className="panel-subtitle">
                 Ranked by leverage-weighted WP swing. Select a card to load its Canvas2D replay.
               </p>

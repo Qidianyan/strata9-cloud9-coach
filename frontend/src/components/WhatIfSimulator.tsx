@@ -286,7 +286,7 @@ export function WhatIfSimulator({
     <section className="panel" aria-label="Interactive Tactical What-If Simulator" data-section="what-if-simulator">
       <div className="panel-header">
         <div>
-          <h2 className="panel-title">05 // Tactical What-If Win-Probability Sandbox</h2>
+          <h2 className="panel-title">03 // Tactical What-If Win-Probability Sandbox</h2>
           <p className="panel-subtitle">
             Empirical GRID corpus model with Wilson 95% CI ({contextLabel})
           </p>
@@ -352,7 +352,8 @@ export function WhatIfSimulator({
                 <div className="whatif-field-head">
                   <label htmlFor="whatif-econ-slider">Economy Differential (Cloud9 vs Opp)</label>
                   <output htmlFor="whatif-econ-slider" className="mono text-volt">
-                    {econDiff >= 0 ? '+' : ''}${econDiff.toLocaleString()}
+                    {econDiff >= 0 ? '+$' : '-$'}
+                    {Math.abs(econDiff).toLocaleString()}
                   </output>
                 </div>
                 <input

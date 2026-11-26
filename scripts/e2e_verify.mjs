@@ -144,29 +144,29 @@ async function main() {
     const box = await teleSvg.boundingBox();
     if (!box) throw new Error('Telestrator SVG bounding box unavailable');
 
-    // 1) Molten Gold Arrow with callout tag
+    // 1) Molten Gold Arrow with callout tag (upper-left A-Drop entry)
     await page.getByLabel('Tactical callout label').fill('A-Drop Pinch');
-    await page.mouse.move(box.x + box.width * 0.28, box.y + box.height * 0.72);
+    await page.mouse.move(box.x + box.width * 0.22, box.y + box.height * 0.72);
     await page.mouse.down();
-    await page.mouse.move(box.x + box.width * 0.56, box.y + box.height * 0.42, { steps: 10 });
+    await page.mouse.move(box.x + box.width * 0.44, box.y + box.height * 0.34, { steps: 10 });
     await page.mouse.up();
 
-    // 2) Crimson Flame Ring around Spike/crossfire zone
+    // 2) Crimson Flame Ring around Spike/crossfire zone (cleanly separated right-center)
     await page.locator('[data-section="telestrator-overlay"] button', { hasText: 'Ring' }).click();
     await page.getByRole('button', { name: /Pen color Crimson Flame/i }).click();
     await page.getByLabel('Tactical callout label').fill('Retake Zone');
-    await page.mouse.move(box.x + box.width * 0.58, box.y + box.height * 0.62);
+    await page.mouse.move(box.x + box.width * 0.62, box.y + box.height * 0.64);
     await page.mouse.down();
-    await page.mouse.move(box.x + box.width * 0.67, box.y + box.height * 0.62, { steps: 8 });
+    await page.mouse.move(box.x + box.width * 0.71, box.y + box.height * 0.64, { steps: 8 });
     await page.mouse.up();
 
-    // 3) Emerald Signal Freehand flank route
+    // 3) Emerald Signal Freehand flank route (top-right flank arc)
     await page.locator('[data-section="telestrator-overlay"] button', { hasText: 'Freehand' }).click();
     await page.getByRole('button', { name: /Pen color Emerald Signal/i }).click();
-    await page.mouse.move(box.x + box.width * 0.42, box.y + box.height * 0.24);
+    await page.mouse.move(box.x + box.width * 0.78, box.y + box.height * 0.26);
     await page.mouse.down();
-    await page.mouse.move(box.x + box.width * 0.52, box.y + box.height * 0.34, { steps: 6 });
-    await page.mouse.move(box.x + box.width * 0.57, box.y + box.height * 0.54, { steps: 6 });
+    await page.mouse.move(box.x + box.width * 0.72, box.y + box.height * 0.42, { steps: 6 });
+    await page.mouse.move(box.x + box.width * 0.66, box.y + box.height * 0.56, { steps: 6 });
     await page.mouse.up();
 
     const drawnCount = await page.locator('svg[aria-label*="Tactical Telestrator"] g[data-stroke-tool]').count();
@@ -189,7 +189,7 @@ async function main() {
     });
     console.log('[E2E] Canvas2D Round Replay + Telestrator (3 real mouse strokes) + AI Coach Q&A verified & captured.');
 
-    // Screenshot 2: Interactive Tactical What-If Sandbox + Spatial Heatmap
+    // Screenshot 2: Interactive Tactical What-If Sandbox + Spatial Heatmap (02 showcases V6 What-If + Spatial Radar!)
     await page.evaluate(() => {
       const el = document.querySelector('[data-section="what-if-simulator"]');
       if (el) el.scrollIntoView({ block: 'start' });
@@ -204,17 +204,11 @@ async function main() {
       path: path.join(SHOTS_DIR, 'after_match_whatif_1440.png'),
       fullPage: false,
     });
-    console.log('[E2E] VALORANT What-If Sandbox + Attach to Export verified & captured.');
-
-    await page.evaluate(() => {
-      const el = document.querySelector('section[aria-label="2D Ability-Cast Spatial Heatmap"]');
-      if (el) el.scrollIntoView({ block: 'start' });
-    });
-    await page.waitForTimeout(300);
     await page.screenshot({
       path: path.join(MATERIALS_DIR, '02_strata9_val_spatial_heatmap.png'),
       fullPage: false,
     });
+    console.log('[E2E] VALORANT What-If Sandbox + Spatial Radar verified & captured (02).');
 
     // Verify real rollback badge on 2775953
     await page.evaluate(() => window.scrollTo(0, 0));
